@@ -1,0 +1,8 @@
+# Local Pi runtime state
+.atl/
+
+# Local MCP configuration may contain credentials
+.pi/mcp.json
+.vscode
+.pi
+skills-lock.json
