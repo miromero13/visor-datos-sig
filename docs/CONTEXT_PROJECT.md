@@ -4,7 +4,7 @@
 
 **VisorDatosSIG** es un sistema orientado a la migración, administración y consulta de información geográfica mediante una aplicación web responsiva.
 
-El proyecto parte de información geográfica proporcionada en archivos **ESRI Shapefile (SHP)** correspondientes a cuatro conjuntos principales: **Manzanas, Lotes, Códigos Fijos y Vías**. Estos archivos contienen tanto información alfanumérica como geometrías espaciales y utilizan el sistema de referencia **WGS 84 (SRID 4326)**.
+El proyecto parte de información geográfica proporcionada en archivos **ESRI Shapefile (SHP)** correspondientes a cuatro conjuntos principales: **Manzanas, Lotes, Códigos Fijos y Vías**. El sistema requiere trabajar con **WGS 84 (SRID 4326)**; cada archivo debe validarse mediante su `.prj` y no se debe asumir su referencia espacial por el nombre del archivo.
 
 La solución permitirá procesar estos archivos, validar su estructura y posteriormente almacenar la información en una base de datos espacial **SQL Server 2022**, respetando el diseño físico definido para el proyecto.
 
@@ -28,11 +28,11 @@ El visor cartográfico permitirá visualizar las diferentes capas geográficas y
 
 La arquitectura del sistema estará separada en diferentes responsabilidades, evitando que el frontend acceda directamente a la base de datos. Todas las operaciones relacionadas con SQL Server deberán realizarse a través del backend.
 
-El flujo principal será:
+El flujo de producción será:
 
 **Archivos SHP → Migrador → SQL Server → Backend/API → GeoJSON → Frontend → Leaflet**
 
-De esta manera, los archivos SHP serán utilizados principalmente como fuente de importación inicial, mientras que posteriormente el visor consultará los datos almacenados en SQL Server.
+En paralelo, durante la Fase 1 se construirá una base temprana del frontend y del visor usando GeoJSON sintético claramente identificado. Ese prototipo no consume datos reales ni reemplaza el flujo de producción. Los archivos SHP se usarán como fuente de importación una vez resueltas y validadas sus referencias espaciales.
 
 ## Tecnologías
 
@@ -73,9 +73,9 @@ Esta decisión tecnológica deberá quedar documentada como parte de la arquitec
 
 # Fases del proyecto
 
-## Fase 1 — Migración de datos geográficos
+## Fase 1 — Migración y fundación temprana del visor
 
-La primera fase estará enfocada en preparar la información geográfica que utilizará el sistema.
+La Fase 1 mantendrá la migración como un frente de trabajo y sumará, en paralelo, una base tangible para la aplicación web y el visor. El trabajo temprano del visor usará exclusivamente GeoJSON sintético o mock, claramente rotulado; no se asumirán los SHP disponibles como fixtures válidos hasta resolver sus metadatos y CRS.
 
 Se desarrollará un **Migrador SHP-SQL Server** encargado de recibir los archivos:
 
@@ -98,17 +98,24 @@ Durante la migración se registrará información como:
 - Duración de la migración.
 - Advertencias e incidencias.
 
-### Resultado de la Fase 1
+### Resultado y puerta de salida de la Fase 1
 
-Al finalizar esta fase, las cuatro capas geográficas deberán encontrarse correctamente almacenadas en **SQL Server 2022**, con sus atributos, geometrías, relaciones, SRID e índices correspondientes.
+La fase entrega dos resultados paralelos:
 
-**Flujo de la fase:**
+- **Migración:** las cuatro capas geográficas quedan validadas y almacenadas en **SQL Server 2022**, con atributos, geometrías, relaciones, SRID e índices coherentes con el diseño oficial.
+- **Fundación web/visor:** una shell React + TypeScript y un mapa Leaflet muestran GeoJSON sintético para cuatro tipos temáticos de geometría/capa; incluyen visibilidad de capas, simbología y leyenda, pan/zoom/selección, estados locales de carga/vacío/error y diseño comprobado a 360, 768 y 1366 px.
+
+El prototipo con datos mock no constituye integración con API ni con datos de producción y no cierra issues Jira cuyos criterios exigen datos SQL/API reales. Los pendientes dependientes de integración permanecen abiertos para la Fase 2.
+
+**Flujos de la fase:**
 
 `SHP + SHX + DBF + PRJ → Validación → Mapeo → Migración → SQL Server 2022`
 
-## Fase 2 — Desarrollo del sistema web y visor SIG
+`GeoJSON sintético → React + TypeScript → Leaflet (prototipo temprano, sin API)`
 
-La segunda fase estará orientada al desarrollo del sistema web que consumirá la información almacenada durante la primera fase.
+## Fase 2 — Backend/API de producción e integración del sistema web
+
+La segunda fase completará el sistema web conectado a los datos reales migrados. Incluye backend/API, autenticación y autorización, integración de datos de producción, búsqueda/filtros y flujos de resultados, además de los criterios restantes de aceptación del visor. El prototipo mock de Fase 1 no sustituye ni anticipa el cumplimiento de esas integraciones.
 
 Se desarrollará un backend utilizando **ASP.NET Core 10 Web API**, encargado de acceder a SQL Server y proporcionar los servicios necesarios para autenticación, usuarios, capas, búsquedas, filtros e información geográfica.
 
@@ -126,48 +133,26 @@ También se implementará el sistema de autenticación y autorización para dife
 
 La interfaz deberá ser responsiva y funcionar correctamente en computadoras, tablets y teléfonos móviles.
 
-### Resultado de la Fase 2
+### Resultado y puerta de salida de la Fase 2
 
-Al finalizar esta fase se contará con un sistema web SIG completamente funcional capaz de consultar los datos almacenados en SQL Server y representarlos de manera interactiva.
+Al finalizar esta fase se contará con un sistema web SIG conectado a los datos reales de SQL Server mediante la API, con autenticación/autorización, búsquedas, filtros, resultados sincronizados y el resto de los criterios de aceptación del visor. La integración real y las issues que la requieren solo se consideran completas al cumplir sus criterios Jira; el prototipo mock no las cierra.
 
 **Flujo de la fase:**
 
-`SQL Server 2022 → ASP.NET Core Web API → GeoJSON → React → Leaflet`
+`SQL Server 2022 → ASP.NET Core Web API → GeoJSON real → React + TypeScript → Leaflet`
 
 ## Arquitectura general
 
-**FUENTES DE DATOS**
+**FASE 1 — DOS FRENTES EN PARALELO**
 
-`Archivos SHP`
+`Archivos SHP → Migrador .NET → SQL Server 2022`
 
-↓
+`GeoJSON sintético → React + TypeScript → Leaflet (visor demostrativo, sin API)`
 
-**FASE 1 — MIGRACIÓN**
+El prototipo usa datos claramente identificados como sintéticos; no representa las capas oficiales ni acredita integración con producción.
 
-`Migrador .NET`
+**FASE 2 — INTEGRACIÓN DE PRODUCCIÓN**
 
-↓
-
-`SQL Server 2022`
-
-↓
-
-**FASE 2 — SISTEMA WEB**
-
-`ASP.NET Core Web API`
-
-↓
-
-`JSON / GeoJSON`
-
-↓
-
-`React + TypeScript`
-
-↓
-
-`Leaflet`
-
-↓
+`SQL Server 2022 → ASP.NET Core Web API → JSON / GeoJSON real → React + TypeScript → Leaflet`
 
 **Usuario Administrador / Consultor**
