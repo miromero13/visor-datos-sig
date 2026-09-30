@@ -1,3 +1,10 @@
+# Local configuration and build output
+.env
+.env.*
+!backend/.env.example
+**/bin/
+**/obj/
+
 # Local Pi runtime state
 .atl/
 
