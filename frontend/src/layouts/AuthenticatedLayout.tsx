@@ -9,7 +9,7 @@ type AuthenticatedLayoutProps = { children: ReactNode; activeItem: NavigationKey
 
 const navigation = [
   { label: "Inicio", icon: House, href: "/dashboard" },
-  { label: "Visor de mapa", icon: Map, href: "#" },
+  { label: "Visor de mapa", icon: Map, href: "/map" },
   { label: "Consultas", icon: Search, href: "#" },
   { label: "Identificación", icon: Crosshair, href: "#" },
   { label: "Administración", icon: UsersRound, href: "#" },

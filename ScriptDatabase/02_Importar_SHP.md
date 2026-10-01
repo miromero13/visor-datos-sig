@@ -82,7 +82,7 @@ Los conteos y descriptores siguientes corresponden a los encabezados/records ins
 
 | Capa → tabla SQL | Campos DBF → SQL | Geometría, identidad y derivaciones |
 |---|---|---|
-| `Exp_CodigoFijo` → `CodigosFijos` | `CodF_SQL` → `CodF_SQL`; `CodF_SIG` → `CodF_SIG`; `Longi` → `Longitud`; `Latid` → `Latitud`; `CodFijo` → `CodFijo`; `Nombre` → `Nombre`. `Text` no tiene columna destino. | `Geom` desde SHP; `Estado` y `FechaCambioEstado` por defaults; `IdLote` derivado espacialmente. |
+| `Exp_CodigoFijo` → `CodigosFijos` | `CodF_SQL` → `CodF_SQL`; `CodF_SIG` → `CodF_SIG`; `Longi` → `Longitud`; `Latid` → `Latitud`; `CodFijo` → `CodFijo`; `Nombre` → `Nombre`. `Text` no tiene columna destino. Durante la migración, `Longitud` y `Latitud` se canonicalizan desde X/Y de la geometría ya transformada porque `Longi`/`Latid` de la DBF fuente son inconsistentes; no se usan esos atributos DBF como coordenadas destino. | `Geom` desde SHP; `Estado` y `FechaCambioEstado` por defaults; `IdLote` derivado espacialmente. |
 | `Exp_MapaBase_LOTES` → `Lotes` | `Id` → `IdOrigen`; `NroLote` → `NroLote`. | `Geom` desde SHP; `IdManzana` derivado espacialmente; `IdLote` identity. |
 | `Exp_MapaBase_MZA` → `Manzanas` | `Id` → `IdOrigen`; `UV_MZA` → `UV_MZA`; `UV` → `UV`; `MZA` → `MZA`. | `Geom` desde SHP; `IdManzana` identity. |
 | `Exp_MapaBase_VIAS` → `Vias` | `OBJECTID` → `OBJECTID`; `Nombre` → `Nombre`; `type` → `TipoVia`; `OSMID` → `OSMID` con conversión a string. | `Geom` desde SHP; `IdVia` identity. `osm_id`, `name`, `ref`, `oneway`, `bridge`, `maxspeed` y `highway` quedan explícitamente source-only/sin mapear. `type` contiene clasificaciones de vía; `highway` es binario/nulo-like y no es una fuente segura para `TipoVia`. |

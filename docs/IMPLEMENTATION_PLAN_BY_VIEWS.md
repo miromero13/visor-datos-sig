@@ -283,7 +283,7 @@ Agregar o utilizar una tabla de auditoría de migraciones con:
 
 ## Backend/API
 
-Estado implementado en esta entrega: existe un flujo backend y frontend inicial de validación y carga. Depende de `NetTopologySuite.IO.ShapeFile` y `ProjNet`; requiere `ConnectionStrings:MigrationDb`. Los endpoints `/api/migrations/validate` y `/api/migrations/execute` requieren Administrador. Los archivos están limitados a 256 MiB cada uno y el número de registros a 250.000 por capa. La ejecución usa SqlBulkCopy en lotes de 1.000 hacia tablas temporales por capa dentro de la misma transacción, seguido de un INSERT...SELECT con conversión server-side de WKT a geometry. Los logs backend informan el avance después de cada lote SqlBulkCopy (capa, número de lote, registros procesados y total) y antes/después del INSERT set-based de geometrías; la respuesta del navegador sigue siendo a nivel de request, sin progreso streaming. Al insertar, se preservan las dimensiones disponibles de las geometrías (X/Y/Z/M) en SQL Server `geometry`; se quitan únicamente las etiquetas dimensionales ISO del WKT, no las ordenadas. Si una dimensión disponible no puede serializarse, la carga falla explícitamente. Replace sustituye únicamente las tablas de las capas seleccionadas y conserva las demás; para mantener la seguridad referencial, al reemplazar Manzanas se ponen en NULL `Lotes.IdManzana` y al reemplazar Lotes se ponen en NULL `CodigosFijos.IdLote` antes de borrar las tablas seleccionadas en orden dependiente. Append no deduplica; no se repara geometría ni se crean relaciones espaciales. La validación actualmente no entrega una muestra de 20 registros.
+Estado implementado en esta entrega: existe un flujo backend y frontend inicial de validación y carga. Depende de `NetTopologySuite.IO.ShapeFile` y `ProjNet`; requiere `ConnectionStrings:MigrationDb`. Los endpoints `/api/migrations/validate` y `/api/migrations/execute` requieren Administrador. Los archivos están limitados a 256 MiB cada uno y el número de registros a 250.000 por capa. La ejecución usa SqlBulkCopy en lotes de 1.000 hacia tablas temporales por capa dentro de la misma transacción, seguido de un INSERT...SELECT con conversión server-side de WKT a geometry. Los logs backend informan el avance después de cada lote SqlBulkCopy (capa, número de lote, registros procesados y total) y antes/después del INSERT set-based de geometrías; la respuesta del navegador sigue siendo a nivel de request, sin progreso streaming. Al insertar, se preservan las dimensiones disponibles de las geometrías (X/Y/Z/M) en SQL Server `geometry`; se quitan únicamente las etiquetas dimensionales ISO del WKT, no las ordenadas. Si una dimensión disponible no puede serializarse, la carga falla explícitamente. Replace sustituye únicamente las tablas de las capas seleccionadas y conserva las demás; para mantener la seguridad referencial, al reemplazar Manzanas se ponen en NULL `Lotes.IdManzana` y al reemplazar Lotes se ponen en NULL `CodigosFijos.IdLote` antes de borrar las tablas seleccionadas en orden dependiente. En `CodigosFijos`, `Longitud` y `Latitud` se canonicalizan desde X/Y de la geometría transformada porque los atributos `Longi`/`Latid` de la DBF fuente son inconsistentes; las otras tres capas conservan sus mapeos DBF. Append no deduplica; no se repara geometría ni se crean relaciones espaciales. La validación actualmente no entrega una muestra de 20 registros.
 
 Crear servicios para:
 
@@ -383,19 +383,17 @@ Crear:
 - `GET /api/layers/{layer}/{id}`.
 - `GET /api/layers/{layer}/extent`.
 
-Soportar:
+Implementado en el slice actual:
 
-- `bbox`;
-- límite de resultados;
-- paginación o carga controlada;
-- campos autorizados;
-- estilos de capa;
-- errores recuperables;
-- GeoJSON válido con coordenadas `[longitude, latitude]`.
+- Catálogo fijo para las cuatro capas y endpoints autenticados de GeoJSON, detalle y extensión.
+- Filtro espacial opcional `bbox`; límite máximo de 1.000 features por respuesta y lectura acotada. No hay paginación en esta fase.
+- Consultas SQL con tabla/atributos definidos por allowlist y parámetros para límites, bbox e identificador.
+- GeoJSON generado desde geometría SQL en SRID 4326 con coordenadas `[longitude, latitude]` y ProblemDetails para errores de solicitud, capa o base de datos.
+- Detalle limitado a atributos permitidos por capa.
 
 ## Frontend
 
-Consultar OpenPencil MCP para la vista del visor y luego implementar:
+El slice actual implementa una vista propia, consistente con la estructura y estilos existentes; no se consultó OpenPencil durante esta tarea. Incluye:
 
 - mapa Leaflet;
 - mapa base con atribución;
@@ -403,13 +401,11 @@ Consultar OpenPencil MCP para la vista del visor y luego implementar:
 - leyenda dinámica;
 - estilos para polígonos, puntos y líneas;
 - zoom a extensión de capa;
-- escala;
-- coordenadas;
-- selección de geometrías;
-- resaltado persistente;
-- panel de atributos;
-- loading, error, retry y empty state;
-- fallback cuando falle el mapa base.
+- indicador del sistema de coordenadas;
+- selección de geometrías y panel de atributos;
+- estados de carga, error y sin resultados.
+
+Pendiente para iteraciones posteriores: escala/coordenadas interactivas, resaltado persistente, reintento explícito y fallback del mapa base. La solicitud de Fase 3 excluye búsqueda, filtros y tabla de Fase 4.
 
 Agregar Leaflet y sus tipos al frontend si todavía no existen.
 
@@ -423,7 +419,7 @@ Agregar Leaflet y sus tipos al frontend si todavía no existen.
 - El GeoJSON cumple su estructura.
 - El mapa no intenta cargar datos ilimitados sin control.
 
-**Salida:** existe un visor funcional conectado a datos reales.
+**Estado del slice:** endpoints y vista de mapa implementados con consultas acotadas; los builds y el chequeo de diff de este cambio quedan como evidencia de cierre. La respuesta de mapa limita a 1.000 elementos por capa sin paginación, por lo que datasets mayores aparecen parcialmente; la carga progresiva queda pendiente.
 
 ---
 

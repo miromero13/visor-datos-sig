@@ -32,6 +32,7 @@ var sessionRegistry = new SessionRegistry(builder.Configuration);
 builder.Services.AddSingleton(sessionRegistry);
 builder.Services.AddSingleton<AuthAuditService>();
 builder.Services.AddScoped<ShapefileMigrationService>();
+builder.Services.AddScoped<LayerQueryService>();
 var tokenService = new JwtTokenService(builder.Configuration, sessionRegistry);
 builder.Services.AddSingleton(tokenService);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
@@ -192,6 +193,27 @@ app.MapPost("/api/migrations/execute", async ([FromForm] IFormFileCollection fil
         return Results.Problem(statusCode: 500, title: "Migration failed", detail: "La migración no pudo completarse. Revisá la consola del backend para ver el detalle técnico.");
     }
 }).DisableAntiforgery().RequireAuthorization("Administrator");
+
+app.MapGet("/api/layers", (LayerQueryService layers) => Results.Ok(layers.Catalog())).RequireAuthorization();
+app.MapGet("/api/layers/{layer}/geojson", async (string layer, string? bbox, int? limit, LayerQueryService query, CancellationToken cancellationToken) =>
+{
+    try { return Results.Ok(await query.GeoJsonAsync(layer, bbox, limit, cancellationToken)); }
+    catch (KeyNotFoundException) { return Results.Problem(statusCode: 404, title: "Layer not found"); }
+    catch (ArgumentException ex) { return Results.Problem(statusCode: 400, title: "Invalid layer query", detail: ex.Message); }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Layer data unavailable", detail: "No se pudieron consultar las capas geográficas."); }
+}).RequireAuthorization();
+app.MapGet("/api/layers/{layer}/extent", async (string layer, LayerQueryService query, CancellationToken cancellationToken) =>
+{
+    try { var extent = await query.ExtentAsync(layer, cancellationToken); return extent is null ? Results.Problem(statusCode: 404, title: "Layer extent not found") : Results.Ok(extent); }
+    catch (KeyNotFoundException) { return Results.Problem(statusCode: 404, title: "Layer not found"); }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Layer data unavailable", detail: "No se pudo consultar la extensión de la capa."); }
+}).RequireAuthorization();
+app.MapGet("/api/layers/{layer}/{id:int}", async (string layer, int id, LayerQueryService query, CancellationToken cancellationToken) =>
+{
+    try { var feature = await query.DetailAsync(layer, id, cancellationToken); return feature is null ? Results.Problem(statusCode: 404, title: "Feature not found") : Results.Ok(feature); }
+    catch (KeyNotFoundException) { return Results.Problem(statusCode: 404, title: "Layer not found"); }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Layer data unavailable", detail: "No se pudo consultar el elemento geográfico."); }
+}).RequireAuthorization();
 
 app.MapPost("/api/shapefile-sources/analyze", ([FromForm] IFormFileCollection files) =>
 {
