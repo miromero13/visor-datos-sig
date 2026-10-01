@@ -29,7 +29,7 @@ Completá estas tareas en orden. Son una línea temprana de preparación; no equ
 
 Hacé las issues en este orden. Antes de cerrar la migración, resolvé con el equipo las decisiones abiertas sobre el diseño físico oficial.
 
-1. [ ] **SIG-15 — Configurar y probar conexión a SQL Server.** Definí y configurá los parámetros de conexión; comprobá que una conexión inválida bloquee el inicio y muestre un error claro.
+1. [x] **SIG-15 — Configurar y probar conexión a SQL Server.** Definí y configurá los parámetros de conexión; comprobá que una conexión inválida bloquee el inicio y muestre un error claro.
 1. [ ] **SIG-16 — Seleccionar archivos fuente Shapefile.** Permití elegir una carpeta o archivos `.shp`; detectá y agrupá `.shx`, `.dbf` y `.prj`, e informá componentes faltantes.
 1. [ ] **SIG-17 — Reconocer las capas geográficas oficiales.** Identificá Manzanas, Lotes, CodigosFijos y Vias; mostrale al operador los metadatos disponibles de cada capa.
 1. [ ] **SIG-18 — Validar integridad de Shapefiles antes de cargar.** Comprobá archivos asociados, lectura y consistencia; detené la carga si faltan componentes requeridos o los datos no son compatibles.

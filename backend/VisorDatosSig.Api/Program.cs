@@ -1,8 +1,17 @@
+using Microsoft.AspNetCore.Mvc;
 using VisorDatosSig.Api;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddAntiforgery();
 builder.Services.AddSingleton<ISqlConnectionProbe, SqlServerConnectionProbe>();
 var app = builder.Build();
+app.UseAntiforgery();
+
+app.MapPost("/api/shapefile-sources/analyze", ([FromForm] IFormFileCollection files) =>
+{
+    var layers = ShapefileSourceAnalyzer.Analyze(files.Select(file => file.FileName));
+    return Results.Ok(new { layers });
+}).DisableAntiforgery();
 
 app.MapPost("/api/sql-connection/test", async (ISqlConnectionProbe probe, CancellationToken cancellationToken) =>
 {

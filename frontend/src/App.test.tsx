@@ -35,6 +35,13 @@ describe('VisorDatosSIG routes', () => {
     expect(within(screen.getByRole('navigation')).getByRole('link', { name: /acceder/i })).toHaveAttribute('href', '/login')
   })
 
+  it('offers a reachable local source-selection page', async () => {
+    const user = userEvent.setup()
+    renderAt('/')
+    await user.click(screen.getByRole('link', { name: /seleccionar archivos/i }))
+    expect(screen.getByRole('heading', { name: /seleccionar archivos shapefile/i })).toBeInTheDocument()
+  })
+
   it('shows an interface-only login page and navigates back to the project', async () => {
     const user = userEvent.setup()
     renderAt('/login')

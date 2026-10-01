@@ -2,14 +2,22 @@
 
 ## Preparación en QGIS
 
-1. Cargue cada archivo SHP.
-2. Para las capas UTM asigne/verifique `EPSG:32720`.
-3. Utilice la capa corregida ubicada en `Datos/Exp_MapaBase_MZA`.
-4. Exporte todas las capas a `EPSG:4326`.
+1. Cargue cada conjunto SHP desde `DatosSIG/`:
+   `Exp_CodigoFijo_4326`, `Exp_MapaBase_LOTES_4326`,
+   `Exp_MapaBase_MZA_4326` y `Exp_MapaBase_VIAS_4326`.
+2. Verifique que cada conjunto incluya `.shp`, `.shx`, `.dbf` y `.prj`.
+3. Lea e interprete el `.prj` antes de importar o transformar coordenadas.
+   El CRS de origen documentado para los datos es `EPSG:32720`; no lo asigne
+   solamente por el nombre del archivo.
+4. Una vez validado que el `.prj` declara `EPSG:32720`, se permite reproyectar
+   automáticamente a `EPSG:4326` (SRID de destino 4326). No confunda el CRS
+   de origen `EPSG:32720` con el SRID de destino `4326`, ni se limite a cambiar
+   la etiqueta CRS sin transformar las coordenadas. Si el `.prj` falta, no se
+   puede leer/validar o declara otro CRS, no aplique esta reproyección automática.
 5. Importe a SQL Server mediante el complemento **MSSQL** o mediante
-   `ogr2ogr`.
+   `ogr2ogr`, asegurando que las geometrías almacenadas tengan SRID 4326.
 
-La capa corregida de manzanas fue verificada con los siguientes datos:
+La capa de manzanas de origen (antes de reproyectar) fue verificada con los siguientes datos:
 
 - Registros: 863.
 - Geometría: PolygonZ.
@@ -19,12 +27,14 @@ La capa corregida de manzanas fue verificada con los siguientes datos:
 
 ## Correspondencia
 
-| SHP | Tabla SQL | Geometría |
+| Archivo SHP en `DatosSIG/` | Tabla SQL | Geometría |
 |---|---|---|
-| Exp_CodigoFijo | CodigosFijos | Geom |
-| Exp_MapaBase_LOTES | Lotes | Geom |
-| Exp_MapaBase_MZA | Manzanas | Geom |
-| Exp_MapaBase_VIAS | Vias | Geom |
+| `Exp_CodigoFijo_4326.shp` | CodigosFijos | Geom |
+| `Exp_MapaBase_LOTES_4326.shp` | Lotes | Geom |
+| `Exp_MapaBase_MZA_4326.shp` | Manzanas | Geom |
+| `Exp_MapaBase_VIAS_4326.shp` | Vias | Geom |
+
+Esta tabla solo documenta capa-tabla; no define correspondencias entre campos DBF y columnas SQL. No se debe inferir ese mapeo.
 
 Todas las geometrías almacenadas deben tener SRID 4326:
 
