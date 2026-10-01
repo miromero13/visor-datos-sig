@@ -1,9 +1,6 @@
-import { Brand } from "@/components/Brand";
-import { useAuth } from "@/components/AuthProvider";
-import { Button } from "@/components/ui/button";
+import { AuthenticatedLayout } from "@/layouts/AuthenticatedLayout";
 import { Card } from "@/components/ui/card";
-
-const navigation = ["Inicio", "Visor de mapa", "Consultas", "Identificación", "Administración"];
+import { useAuth } from "@/components/AuthProvider";
 const indicators = [
   { label: "Manzanas", value: "863", unit: "Polígonos", color: "bg-violet-100 text-violet-700", mark: "▦" },
   { label: "Lotes", value: "15.281", unit: "Polígonos", color: "bg-blue-100 text-blue-700", mark: "⌗" },
@@ -12,53 +9,10 @@ const indicators = [
 ];
 
 export function DashboardPage() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const firstName = user?.name?.trim().split(/\s+/)[0] || "Lucía";
-  const displayName = user?.name || "Lucía Castro";
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A]">
-      <header className="flex h-[68px] items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
-        <div className="flex min-w-0 items-center gap-3 sm:gap-5">
-          <Brand />
-          <span className="hidden text-sm text-slate-300 sm:inline" aria-hidden="true">
-            /
-          </span>
-          <span className="hidden text-sm font-medium text-slate-600 sm:inline">Operación territorial</span>
-        </div>
-        <div className="flex items-center gap-2 sm:gap-4">
-          <div className="hidden text-right sm:block">
-            <p className="m-0 text-sm font-semibold">{displayName}</p>
-            <p className="m-0 text-xs text-slate-500">{user?.roles?.join(" · ") || "Administradora"}</p>
-          </div>
-          <div className="grid size-9 place-items-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700" aria-label={`Avatar de ${displayName}`}>
-            {displayName
-              .split(/\s+/)
-              .map((part) => part[0])
-              .slice(0, 2)
-              .join("")}
-          </div>
-        </div>
-      </header>
-      <div className="md:flex">
-        <aside className="bg-[#0F172A] px-4 py-4 text-slate-300 md:flex md:min-h-[calc(100vh-68px)] md:w-[248px] md:shrink-0 md:flex-col md:px-4 md:py-7">
-          <div className="mb-6 hidden px-3 md:block">
-            <p className="mb-1 text-[10px] font-semibold tracking-[.14em] text-slate-400">SISTEMA DE INFORMACIÓN</p>
-            <p className="m-0 text-sm font-medium text-white">Gestión territorial</p>
-          </div>
-          <p className="mb-3 px-3 text-[10px] font-semibold tracking-[.14em] text-slate-500">ESPACIOS DE TRABAJO</p>
-          <nav aria-label="Navegación principal" className="flex gap-2 overflow-x-auto md:grid md:gap-1">
-            {navigation.map((item, index) => (
-              <a key={item} href={index === 0 ? "/dashboard" : "#"} aria-current={index === 0 ? "page" : undefined} className={`shrink-0 rounded-md px-3 py-2.5 text-sm no-underline transition-colors ${index === 0 ? "bg-blue-600 font-semibold text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"}`}>
-                {item}
-              </a>
-            ))}
-          </nav>
-          <div className="mt-auto hidden border-t border-slate-700 px-3 pt-5 md:block">
-            <Button variant="outline" className="w-full px-2 text-xs sm:ml-1 sm:px-3 cursor-pointer" onClick={() => void logout()}>
-              Salir
-            </Button>
-          </div>
-        </aside>
+    <AuthenticatedLayout activeItem="Inicio">
         <main className="min-w-0 flex-1 px-5 py-7 md:px-8 md:py-6 lg:px-10">
           <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
             <div>
@@ -162,7 +116,6 @@ export function DashboardPage() {
           </div>
           <p className="mt-5 text-center text-[11px] text-slate-400">Resumen de diseño · Los datos pueden no reflejar información en tiempo real.</p>
         </main>
-      </div>
-    </div>
+    </AuthenticatedLayout>
   );
 }
