@@ -1,0 +1,7 @@
+**
+!backend/
+backend/**
+!backend/VisorDatosSig.Api/
+backend/VisorDatosSig.Api/**
+!backend/VisorDatosSig.Api/VisorDatosSig.Api.csproj
+!backend/VisorDatosSig.Api/*.cs
