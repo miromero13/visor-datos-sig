@@ -128,9 +128,25 @@ public sealed class ShapefileMigrationService(IConfiguration configuration, ILog
                     cancellationToken.ThrowIfCancellationRequested();
                     var feature = features[index];
                     var row = batch.NewRow();
+                    double? canonicalLongitude = null;
+                    double? canonicalLatitude = null;
+                    if (layer.Table == "CodigosFijos")
+                    {
+                        if (feature.Geometry is not Point point)
+                            throw new InvalidDataException("CodigosFijos features must have point geometry to derive coordinate attributes.");
+                        if (!double.IsFinite(point.X) || !double.IsFinite(point.Y))
+                            throw new InvalidDataException("CodigosFijos point geometry must have finite X and Y coordinates.");
+                        canonicalLongitude = point.X;
+                        canonicalLatitude = point.Y;
+                    }
                     for (var field = 0; field < layer.SourceFields.Length; field++)
                     {
-                        object? value = feature.Attributes[layer.SourceFields[field]];
+                        object? value = layer.SourceFields[field] switch
+                        {
+                            "Longi" when layer.Table == "CodigosFijos" => canonicalLongitude,
+                            "Latid" when layer.Table == "CodigosFijos" => canonicalLatitude,
+                            _ => feature.Attributes[layer.SourceFields[field]]
+                        };
                         if (layer.Table == "Vias" && layer.SourceFields[field] == "OSMID" && value is not null) value = Convert.ToString(value, CultureInfo.InvariantCulture);
                         if (layer.SourceFields[field] is "Longi" or "Latid" && value is not null) value = Convert.ToDouble(value, CultureInfo.InvariantCulture);
                         if (value is not null && layer.StagingColumns[field].DataType != typeof(string))
