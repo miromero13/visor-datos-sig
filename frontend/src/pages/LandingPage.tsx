@@ -59,12 +59,6 @@ export function LandingPage() {
 							</Button>
 							<Button
 								asChild
-								className="min-h-[46px] whitespace-nowrap px-[17px] text-[13px] font-semibold"
-							>
-								<Link to="/sources">Seleccionar archivos</Link>
-							</Button>
-							<Button
-								asChild
 								variant="outline"
 								className="min-h-[46px] whitespace-nowrap border-[#c6d4e9] bg-white px-[17px] text-[13px] font-semibold text-[#08142e]"
 							>

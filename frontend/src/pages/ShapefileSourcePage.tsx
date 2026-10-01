@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { analyzeShapefileSources, type ShapefileLayer } from "@/lib/shapefileSources";
+import type { ShapefileLayer } from "@/lib/shapefileSources";
+import { apiFetch } from "@/lib/auth";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 
@@ -13,7 +14,15 @@ export function ShapefileSourcePage() {
     setLoading(true);
     setError("");
     setLayers([]);
-    try { setLayers(await analyzeShapefileSources(files)); }
+    try {
+      const body = new FormData();
+      for (const file of files) body.append("files", file, file.name);
+      const response = await apiFetch("/api/shapefile-sources/analyze", { method: "POST", body, headers: {} });
+      if (!response.ok) throw new Error(`La API no pudo analizar los archivos (HTTP ${response.status}).`);
+      const result = await response.json() as { layers?: ShapefileLayer[] };
+      if (!Array.isArray(result.layers)) throw new Error("La respuesta de la API no tiene el formato esperado.");
+      setLayers(result.layers);
+    }
     catch (cause) { setError(cause instanceof Error ? cause.message : "No se pudieron analizar los archivos."); }
     finally { setLoading(false); }
   }

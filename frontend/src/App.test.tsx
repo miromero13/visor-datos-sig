@@ -35,26 +35,18 @@ describe('VisorDatosSIG routes', () => {
     expect(within(screen.getByRole('navigation')).getByRole('link', { name: /acceder/i })).toHaveAttribute('href', '/login')
   })
 
-  it('offers a reachable local source-selection page', async () => {
-    const user = userEvent.setup()
-    renderAt('/')
-    await user.click(screen.getByRole('link', { name: /seleccionar archivos/i }))
-    expect(screen.getByRole('heading', { name: /seleccionar archivos shapefile/i })).toBeInTheDocument()
-  })
-
-  it('shows an interface-only login page and navigates back to the project', async () => {
+  it('shows an enabled public login form and navigates back to the project', async () => {
     const user = userEvent.setup()
     renderAt('/login')
 
-    expect(screen.getByRole('heading', { name: /ingresar al visor/i })).toBeInTheDocument()
-    expect(screen.getByText(/autenticación y el servicio de acceso aún no están implementados.*no está conectada a un backend/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/correo electrónico/i)).toBeDisabled()
-    expect(screen.getByLabelText(/correo electrónico/i)).toHaveAttribute('data-slot', 'input')
-    expect(screen.getByRole('status')).toHaveAttribute('data-slot', 'alert')
+    expect(screen.getByRole('heading', { name: /ingresá a tu espacio/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/usuario/i)).toBeEnabled()
+    expect(screen.getByLabelText(/usuario/i)).toHaveAttribute('data-slot', 'input')
     expect(screen.getByTestId('login-panel')).toHaveAttribute('data-slot', 'card')
-    expect(screen.getByLabelText(/contraseña/i)).toBeDisabled()
-    expect(screen.getByRole('button', { name: /iniciar sesión/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /iniciar sesión/i })).toHaveAttribute('data-slot', 'button')
+    expect(screen.getByLabelText(/contraseña/i)).toBeEnabled()
+    expect(screen.getByRole('checkbox', { name: /mantener sesión iniciada/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /ingresar/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /ingresar/i })).toHaveAttribute('data-slot', 'button')
     await user.click(screen.getByRole('link', { name: /volver al proyecto/i }))
     expect(screen.getByRole('heading', { name: /información geográfica, vista con contexto/i })).toBeInTheDocument()
   })
