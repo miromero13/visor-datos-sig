@@ -8,7 +8,11 @@ Example `.env` file content (replace every placeholder; never commit real creden
 ConnectionStrings__MigrationDb='Server=YOUR_SQL_SERVER;Database=VisorDatosSIG;User Id=YOUR_SQL_USER;Password=YOUR_SQL_PASSWORD;Encrypt=True;TrustServerCertificate=False'
 ```
 
-## Build, test, and run locally
+## Authentication diagnostics
+
+Login returns HTTP 401 (`Login failed.`) for invalid credentials or an inactive/missing user. HTTP 503 (`Authentication service unavailable.`) indicates SQL or configuration unavailability.
+
+## Migration, build, test, and run locally
 
 Commands below assume macOS/Linux and a .NET 10 SDK. ASP.NET Core does not load `.env` files automatically, so load the file into the current shell before running the API.
 
@@ -34,14 +38,26 @@ Commands below assume macOS/Linux and a .NET 10 SDK. ASP.NET Core does not load 
    dotnet restore VisorDatosSig.Api/VisorDatosSig.Api.csproj
    ```
 
-4. Compile the API and run its tests:
+4. After sourcing the environment, run the ordered scripts in `ScriptDatabase/` without starting the API:
+
+    ```sh
+    dotnet run --project VisorDatosSig.Api/VisorDatosSig.Api.csproj -- --migrate-database
+    ```
+
+    An alternate scripts directory can be supplied as the optional argument:
+
+    ```sh
+    dotnet run --project VisorDatosSig.Api/VisorDatosSig.Api.csproj -- --migrate-database /path/to/ScriptDatabase
+    ```
+
+5. Compile the API and run its tests:
 
    ```sh
    dotnet build VisorDatosSig.Api/VisorDatosSig.Api.csproj
    dotnet test VisorDatosSig.Api.Tests/VisorDatosSig.Api.Tests.csproj
    ```
 
-5. Start the API:
+6. Start the API:
 
    ```sh
    dotnet run --project VisorDatosSig.Api/VisorDatosSig.Api.csproj

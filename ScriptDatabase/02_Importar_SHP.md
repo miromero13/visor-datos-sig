@@ -34,7 +34,45 @@ La capa de manzanas de origen (antes de reproyectar) fue verificada con los sigu
 | `Exp_MapaBase_MZA_4326.shp` | Manzanas | Geom |
 | `Exp_MapaBase_VIAS_4326.shp` | Vias | Geom |
 
-Esta tabla solo documenta capa-tabla; no define correspondencias entre campos DBF y columnas SQL. No se debe inferir ese mapeo.
+## Inventario DBF verificado y mapeo inicial aprobado
+
+Los conteos y descriptores siguientes corresponden a los encabezados/records inspeccionados. Tipo, ancho y decimales se muestran tal como están declarados en DBF.
+
+| Archivo | Registros | Campo | Tipo, ancho, decimales |
+|---|---:|---|---|
+| `Exp_CodigoFijo_4326.dbf` | 6271 | Text | C, 254 |
+|  |  | CodF_SQL | N, 10, 0 |
+|  |  | CodF_SIG | C, 25 |
+|  |  | Longi | N, 19, 6 |
+|  |  | Latid | N, 19, 6 |
+|  |  | CodFijo | N, 10, 0 |
+|  |  | Nombre | C, 40 |
+| `Exp_MapaBase_LOTES_4326.dbf` | 15281 | Id | N, 6, 0 |
+|  |  | NroLote | C, 15 |
+| `Exp_MapaBase_MZA_4326.dbf` | 863 | Id | N, 6, 0 |
+|  |  | UV_MZA | C, 20 |
+|  |  | UV | C, 15 |
+|  |  | MZA | C, 10 |
+| `Exp_MapaBase_VIAS_4326.dbf` | 578 | osm_id | N, 11, 0 |
+|  |  | name | C, 48 |
+|  |  | ref | C, 16 |
+|  |  | type | C, 16 |
+|  |  | oneway | N, 1, 0 |
+|  |  | bridge | N, 1, 0 |
+|  |  | maxspeed | N, 3, 0 |
+|  |  | OBJECTID | N, 10, 0 |
+|  |  | Nombre | C, 40 |
+|  |  | OSMID | N, 10, 0 |
+|  |  | highway | N, 10, 0 |
+
+| Capa → tabla SQL | Campos DBF → SQL | Geometría, identidad y derivaciones |
+|---|---|---|
+| `Exp_CodigoFijo` → `CodigosFijos` | `CodF_SQL` → `CodF_SQL`; `CodF_SIG` → `CodF_SIG`; `Longi` → `Longitud`; `Latid` → `Latitud`; `CodFijo` → `CodFijo`; `Nombre` → `Nombre`. `Text` no tiene columna destino. | `Geom` desde SHP; `Estado` y `FechaCambioEstado` por defaults; `IdLote` derivado espacialmente. |
+| `Exp_MapaBase_LOTES` → `Lotes` | `Id` → `IdOrigen`; `NroLote` → `NroLote`. | `Geom` desde SHP; `IdManzana` derivado espacialmente; `IdLote` identity. |
+| `Exp_MapaBase_MZA` → `Manzanas` | `Id` → `IdOrigen`; `UV_MZA` → `UV_MZA`; `UV` → `UV`; `MZA` → `MZA`. | `Geom` desde SHP; `IdManzana` identity. |
+| `Exp_MapaBase_VIAS` → `Vias` | `OBJECTID` → `OBJECTID`; `Nombre` → `Nombre`; `type` → `TipoVia`; `OSMID` → `OSMID` con conversión a string. | `Geom` desde SHP; `IdVia` identity. `osm_id`, `name`, `ref`, `oneway`, `bridge`, `maxspeed` y `highway` quedan explícitamente source-only/sin mapear. `type` contiene clasificaciones de vía; `highway` es binario/nulo-like y no es una fuente segura para `TipoVia`. |
+
+No se infieren destinos para campos no listados. El mapeo inicial aún debe validar valores, truncamiento y nulabilidad en runtime.
 
 Todas las geometrías almacenadas deben tener SRID 4326:
 
@@ -66,4 +104,4 @@ SELECT IdManzana FROM dbo.Manzanas
 WHERE Geom IS NULL OR Geom.STIsValid()=0;
 ```
 
-El conteo esperado para `Manzanas` después de la importación es **863**.
+Conteos DBF verificados: `CodigosFijos` 6271, `Lotes` 15281, `Manzanas` 863 y `Vias` 578. El conteo esperado para `Manzanas` después de la importación es **863**; verificar también los otros conteos tras cargar y validar los datos.

@@ -74,15 +74,18 @@ Decisiones aprobadas para la Fase 0 (ver contrato completo en
   scripts. Esto solo es válido para desarrollo o entornos controlados y no implica
   que sean adecuados para producción.
 
-Validar antes de desarrollar:
+Contratos completados en Fase 0:
 
-- claves y reglas de duplicados;
-- campos DBF y correspondencia con SQL;
-- relaciones `Código Fijo → Lote → Manzana`;
-- campos visibles, buscables y exportables;
-- reglas de reparación geométrica;
-- reproyección `EPSG:32720 → EPSG:4326`;
-- estrategia de credenciales para producción y transición desde las semillas de desarrollo/entornos controlados.
+- inventario DBF verificado y mapeo inicial explícito a SQL, incluidos los campos source-only;
+- convenciones API para ProblemDetails, JSON, paginación, GeoJSON, coordenadas, límites y allowlists;
+- matriz provisional de capacidades por rol y decisión CRS documentadas.
+
+Validar durante la implementación/runtime:
+
+- valores, truncamiento y nulabilidad del mapeo aprobado, además de claves y reglas de duplicados;
+- relaciones `Código Fijo → Lote → Manzana` y campos visibles, buscables y exportables;
+- reglas de reparación geométrica y reproyección `EPSG:32720 → EPSG:4326` frente a cada `.prj` real;
+- estrategia de credenciales de producción y transición desde las semillas de desarrollo/entornos controlados.
 
 ## Backend
 
@@ -102,12 +105,19 @@ Validar antes de desarrollar:
 
 ## Salida de la fase
 
-- Diseño SQL validado.
-- Mapa de campos fuente/destino aprobado.
-- Contratos de API definidos.
-- Decisión de roles documentada.
-- CRS y reproyección documentados.
-- Estructura visual consultada desde OpenPencil.
+**Estado de salida: Fase 0 — contrato técnico completo.** No implica que se haya implementado runtime ni que las vistas estén listas.
+
+- Mapa inicial de campos fuente/destino aprobado con inventario DBF verificado en `docs/PHASE_0_TECHNICAL_CONTRACTS.md` y `ScriptDatabase/02_Importar_SHP.md`.
+- Convenciones de API definidas en el contrato técnico, preservando el comportamiento actual de endpoints.
+- Matriz provisional de capacidades por rol, autoridad de políticas de endpoint y carácter exclusivamente presentacional del menú documentados.
+- Política CRS y reproyección documentadas.
+
+**Seguimientos de implementación (no bloquean el cierre contractual de Fase 0):**
+
+- Validar en runtime el diseño SQL contra valores, truncamiento y nulabilidad reales.
+- Implementar y verificar políticas de autorización por endpoint; no confiar en la visibilidad del menú como control de acceso.
+- Consultar OpenPencil para la estructura visual antes de implementar vistas.
+- Provisionar y rotar credenciales de producción y definir la transición desde las semillas actuales; se mantienen las semillas actuales por decisión aprobada.
 
 ---
 
