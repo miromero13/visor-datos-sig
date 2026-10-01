@@ -27,8 +27,11 @@ builder.Services.AddCors(options => options.AddPolicy("ViteDevelopment", policy 
     policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
 builder.Services.AddSingleton<ISqlConnectionProbe, SqlServerConnectionProbe>();
 builder.Services.AddSingleton<AuthService>();
-builder.Services.AddSingleton<JwtTokenService>();
-var tokenService = new JwtTokenService(builder.Configuration);
+var sessionRegistry = new SessionRegistry(builder.Configuration);
+builder.Services.AddSingleton(sessionRegistry);
+builder.Services.AddSingleton<AuthAuditService>();
+var tokenService = new JwtTokenService(builder.Configuration, sessionRegistry);
+builder.Services.AddSingleton(tokenService);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
 {
     options.MapInboundClaims = false;
@@ -42,12 +45,27 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
         },
         OnTokenValidated = context =>
         {
-            if (context.Principal?.FindFirstValue("token_type") != "access") context.Fail("The cookie does not contain an access token.");
+            var principal = context.Principal;
+            if (principal?.FindFirstValue("token_type") != "access") { context.Fail("The cookie does not contain an access token."); return Task.CompletedTask; }
+            var sessions = context.HttpContext.RequestServices.GetRequiredService<SessionRegistry>();
+            var audit = context.HttpContext.RequestServices.GetRequiredService<AuthAuditService>();
+            var sid = principal?.FindFirstValue("sid");
+            var expired = false;
+            if (!int.TryParse(principal?.FindFirstValue(JwtRegisteredClaimNames.Sub), out var userId) || !sessions.ValidateAndTouch(sid, userId, out expired))
+            {
+                if (expired) audit.Record("SessionExpired", userId);
+                context.Fail("The session is invalid or expired.");
+            }
+            return Task.CompletedTask;
+        },
+        OnForbidden = context =>
+        {
+            context.HttpContext.RequestServices.GetRequiredService<AuthAuditService>().Record("AccessDenied");
             return Task.CompletedTask;
         }
     };
 });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options => options.AddPolicy("Administrator", policy => policy.RequireRole("Administrador")));
 var app = builder.Build();
 app.UseCors("ViteDevelopment");
 app.UseAntiforgery();
@@ -69,9 +87,9 @@ static void WriteCookies(HttpContext context, JwtTokenService tokens, IssuedToke
     context.Response.Cookies.Append(JwtTokenService.RefreshCookie, issued.RefreshToken, refreshOptions);
 }
 
-app.MapPost("/api/auth/login", async (LoginRequest request, AuthService auth, JwtTokenService tokens, HttpContext context, CancellationToken cancellationToken) =>
+app.MapPost("/api/auth/login", async (LoginRequest request, AuthService auth, JwtTokenService tokens, SessionRegistry sessions, AuthAuditService audit, HttpContext context, CancellationToken cancellationToken) =>
 {
-    if (string.IsNullOrWhiteSpace(request.Login) || string.IsNullOrEmpty(request.Password)) return AuthProblem();
+    if (string.IsNullOrWhiteSpace(request.Login) || string.IsNullOrEmpty(request.Password)) { audit.Record("LoginFailed", login: request.Login, reason: "invalid_credentials"); return AuthProblem(); }
     AuthUser? user;
     try
     {
@@ -81,13 +99,15 @@ app.MapPost("/api/auth/login", async (LoginRequest request, AuthService auth, Jw
     {
         return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "Service Unavailable", detail: "Authentication service unavailable.");
     }
-    if (user is null) return AuthProblem();
-    var issued = tokens.Issue(user, request.RememberMe);
+    if (user is null) { audit.Record("LoginFailed", login: request.Login, reason: "invalid_credentials_or_inactive"); return AuthProblem(); }
+    var sid = sessions.Create(user.Id);
+    audit.Record("LoginSucceeded", user.Id, user.Login);
+    var issued = tokens.Issue(user, request.RememberMe, sid);
     WriteCookies(context, tokens, issued, request.RememberMe);
     return Results.Ok(Envelope(user));
 }).AllowAnonymous();
 
-app.MapPost("/api/auth/refresh", (HttpContext context, JwtTokenService tokens) =>
+app.MapPost("/api/auth/refresh", (HttpContext context, JwtTokenService tokens, SessionRegistry sessions, AuthAuditService audit) =>
 {
     var raw = context.Request.Cookies[JwtTokenService.RefreshCookie];
     if (string.IsNullOrWhiteSpace(raw)) return AuthProblem();
@@ -97,8 +117,10 @@ app.MapPost("/api/auth/refresh", (HttpContext context, JwtTokenService tokens) =
         var principal = handler.ValidateToken(raw, tokens.ValidationParameters, out _);
         if (principal.FindFirstValue("token_type") != "refresh") return AuthProblem();
         var user = JwtTokenService.UserFromPrincipal(principal);
+        var sid = principal.FindFirstValue("sid");
+        if (!sessions.ValidateAndTouch(sid, user.Id, out var expired)) { if (expired) audit.Record("SessionExpired", user.Id); return AuthProblem(); }
         var persistent = principal.FindFirstValue("remember_me") == "true";
-        var issued = tokens.Issue(user, persistent);
+        var issued = tokens.Issue(user, persistent, sid!);
         WriteCookies(context, tokens, issued, persistent);
         return Results.Ok(Envelope(user));
     }
@@ -108,12 +130,13 @@ app.MapPost("/api/auth/refresh", (HttpContext context, JwtTokenService tokens) =
 
 app.MapGet("/api/auth/session", (ClaimsPrincipal principal) => Results.Ok(Envelope(JwtTokenService.UserFromPrincipal(principal)))).RequireAuthorization();
 app.MapGet("/api/auth/me", (ClaimsPrincipal principal) => Results.Ok(Envelope(JwtTokenService.UserFromPrincipal(principal)))).RequireAuthorization();
-app.MapPost("/api/auth/change-password", async (ChangePasswordRequest request, ClaimsPrincipal principal, AuthService auth, CancellationToken cancellationToken) =>
+app.MapPost("/api/auth/change-password", async (ChangePasswordRequest request, ClaimsPrincipal principal, AuthService auth, AuthAuditService audit, CancellationToken cancellationToken) =>
 {
     if (string.IsNullOrEmpty(request.NewPassword) || request.NewPassword.Length < 8) return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid request", detail: "La nueva contraseña debe tener al menos 8 caracteres.");
     try
     {
         var changed = await auth.ChangePasswordAsync(JwtTokenService.UserFromPrincipal(principal), request.CurrentPassword ?? "", request.NewPassword, cancellationToken);
+        if (changed) audit.Record("PasswordChanged", JwtTokenService.UserFromPrincipal(principal).Id);
         return changed ? Results.NoContent() : Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Unauthorized", detail: "No se pudo validar la contraseña actual.");
     }
     catch (AuthenticationInfrastructureException)
@@ -122,8 +145,10 @@ app.MapPost("/api/auth/change-password", async (ChangePasswordRequest request, C
     }
 }).RequireAuthorization();
 
-app.MapPost("/api/auth/logout", (HttpContext context) =>
+app.MapPost("/api/auth/logout", (HttpContext context, SessionRegistry sessions, AuthAuditService audit) =>
 {
+    var raw = context.Request.Cookies[JwtTokenService.AccessCookie] ?? context.Request.Cookies[JwtTokenService.RefreshCookie];
+    if (!string.IsNullOrWhiteSpace(raw)) { try { var principal = new JwtSecurityTokenHandler { MapInboundClaims = false }.ValidateToken(raw, context.RequestServices.GetRequiredService<JwtTokenService>().ValidationParameters, out _); sessions.Revoke(principal.FindFirstValue("sid")); audit.Record("Logout", int.TryParse(principal.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id) ? id : null); } catch (SecurityTokenException) { } }
     var options = new CookieOptions { HttpOnly = true, SameSite = SameSiteMode.Lax, Secure = context.Request.IsHttps, Path = "/" };
     context.Response.Cookies.Delete(JwtTokenService.AccessCookie, options);
     context.Response.Cookies.Delete(JwtTokenService.RefreshCookie, options);
@@ -146,7 +171,7 @@ app.MapPost("/api/sql-connection/test", async (ISqlConnectionProbe probe, Cancel
         _ => StatusCodes.Status502BadGateway
     };
     return Results.Json(new { status = result.Status.ToString(), message = result.Message }, statusCode: status);
-}).RequireAuthorization();
+}).RequireAuthorization("Administrator");
 
 app.Run();
 
