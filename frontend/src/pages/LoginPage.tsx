@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { LockKeyhole, UserRound } from "lucide-react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -62,18 +63,14 @@ export function LoginPage() {
               Usuario
             </label>
             <div className="relative">
-              <span aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                ◉
-              </span>
+              <UserRound aria-hidden="true" size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <Input className="h-11 w-full rounded-md border-[#CBD5E1] bg-white pl-9 text-[#253b5b]" id="login" name="login" autoComplete="username" placeholder="Nombre de usuario" value={login} onChange={(event) => setLogin(event.target.value)} required aria-describedby={error ? "login-error" : undefined} />
             </div>
             <label className="mt-2 text-sm font-medium text-slate-700" htmlFor="password">
               Contraseña
             </label>
             <div className="relative">
-              <span aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                ▣
-              </span>
+              <LockKeyhole aria-hidden="true" size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <Input className="h-11 w-full rounded-md border-[#CBD5E1] bg-white pl-9 text-[#253b5b]" id="password" name="password" type="password" autoComplete="current-password" placeholder="Ingresá tu contraseña" value={password} onChange={(event) => setPassword(event.target.value)} required aria-describedby={error ? "login-error" : undefined} />
             </div>
             <label className="mt-1 flex min-h-10 items-center gap-2 text-sm text-slate-600">
