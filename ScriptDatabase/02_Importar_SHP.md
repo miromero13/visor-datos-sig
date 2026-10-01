@@ -7,17 +7,32 @@
    `Exp_MapaBase_MZA_4326` y `Exp_MapaBase_VIAS_4326`.
 2. Verifique que cada conjunto incluya `.shp`, `.shx`, `.dbf` y `.prj`.
 3. Lea e interprete el `.prj` antes de importar o transformar coordenadas.
-   El CRS de origen documentado para los datos es `EPSG:32720`; no lo asigne
-   solamente por el nombre del archivo.
-4. Una vez validado que el `.prj` declara `EPSG:32720`, se permite reproyectar
-   automáticamente a `EPSG:4326` (SRID de destino 4326). No confunda el CRS
-   de origen `EPSG:32720` con el SRID de destino `4326`, ni se limite a cambiar
-   la etiqueta CRS sin transformar las coordenadas. Si el `.prj` falta, no se
-   puede leer/validar o declara otro CRS, no aplique esta reproyección automática.
-5. Importe a SQL Server mediante el complemento **MSSQL** o mediante
-   `ogr2ogr`, asegurando que las geometrías almacenadas tengan SRID 4326.
+   Se aceptan únicamente estos CRS declarados explícitamente en el `.prj`:
+   geográfico WGS 1984 con unidades en grados (`EPSG:4326`) y WGS 1984 UTM zona
+   20S (`EPSG:32720`). No infiera el CRS por el nombre del archivo.
+4. Los datos actuales de `DatosSIG/` declaran `GEOGCS` WGS 1984 y unidades en
+   grados: ya están en `EPSG:4326` y no deben transformarse. Para un `.prj` que
+   declare `EPSG:32720`, reproyecte automáticamente a `EPSG:4326` (SRID de destino
+   4326). No confunda el CRS de origen con el SRID de destino ni se limite a
+   cambiar la etiqueta CRS sin transformar coordenadas. Si el `.prj` falta, no
+   se puede leer, es ambiguo o declara otro CRS, rechace la capa.
+5. El backend incorpora validación/carga en `/api/migrations`: requiere los cuatro
+   componentes y permite solo las cuatro capas listadas abajo. Acepta PRJ de
+   origen EPSG:4326 (sin transformación) o EPSG:32720 (transformado a EPSG:4326)
+   y guarda mediante SQL Server `geometry` con SRID 4326. Al insertar, las geometrías
+   se preservan las dimensiones disponibles (X/Y/Z/M) en SQL Server `geometry`; se
+   quitan solo las etiquetas dimensionales ISO del WKT, no las ordenadas. Si una
+   dimensión disponible no puede serializarse, la carga falla explícitamente. Ambos endpoints requieren rol
+   Administrador. La carga admite `replace` (transacción única) y `append` (sin
+   deduplicación). Los archivos tienen límite individual de 256 MiB y las capas
+   límite de 250.000 registros; el resumen informa progreso determinístico por
+   fase/conteo, no progreso de streaming. La ejecución informa en logs el inicio y fin de cada capa con su conteo; usa SqlBulkCopy en lotes de 1.000 hacia staging temporal dentro de la transacción y luego inserta por capa mediante INSERT...SELECT, parseando WKT en SQL Server. No hay reparación geométrica, relación
+   espacial derivada, UI de previsualización ni historial durable. La ejecución
+   requiere `ConnectionStrings:MigrationDb`.
+6. Alternativamente, importe mediante el complemento **MSSQL** o `ogr2ogr`,
+   asegurando que las geometrías almacenadas tengan SRID 4326.
 
-La capa de manzanas de origen (antes de reproyectar) fue verificada con los siguientes datos:
+La capa actual de manzanas en `DatosSIG/` ya está en EPSG:4326. La capa de manzanas EPSG:32720 de la que provienen los datos fue verificada con los siguientes datos:
 
 - Registros: 863.
 - Geometría: PolygonZ.

@@ -68,8 +68,9 @@ Decisiones aprobadas para la Fase 0 (ver contrato completo en
 
 - conservar los roles operativos actuales de `ScriptDatabase/07_Roles_Usuarios_Menu.sql`:
   `Administrador`, `Catastro`, `Lecturador`, `Cortador` y `Reconexion`;
-- leer y validar el `.prj` de cada fuente; aceptar fuentes `EPSG:32720` y
-  reproyectarlas automáticamente a `SRID 4326` antes de almacenarlas;
+- leer y validar el `.prj` de cada fuente; aceptar WGS 1984 geográfico/
+  `EPSG:4326` sin transformar y WGS 1984 UTM zona 20S/`EPSG:32720` con
+  reproyección automática a `SRID 4326`; rechazar CRS ausentes, ambiguos o no aprobados;
 - conservar por ahora los usuarios y credenciales de semilla definidos por los
   scripts. Esto solo es válido para desarrollo o entornos controlados y no implica
   que sean adecuados para producción.
@@ -84,7 +85,7 @@ Validar durante la implementación/runtime:
 
 - valores, truncamiento y nulabilidad del mapeo aprobado, además de claves y reglas de duplicados;
 - relaciones `Código Fijo → Lote → Manzana` y campos visibles, buscables y exportables;
-- reglas de reparación geométrica y reproyección `EPSG:32720 → EPSG:4326` frente a cada `.prj` real;
+- reglas de reparación geométrica y validación/reproyección CRS frente a cada `.prj` real; los `.prj` actuales de `DatosSIG/` declaran WGS 1984 geográfico en grados (`EPSG:4326`) y no requieren transformación;
 - estrategia de credenciales de producción y transición desde las semillas de desarrollo/entornos controlados.
 
 ## Backend
@@ -200,6 +201,24 @@ Crear:
 - mensajes de credenciales inválidas;
 - estados loading, error y sesión expirada.
 
+### Implementado en este slice
+
+- Login y cookies JWT existentes; `/api/auth/session` conserva su contrato y `/api/auth/me` ofrece el alias protegido.
+- Cambio de contraseña autenticado con verificación PBKDF2-SHA256, salt nuevo y respuesta genérica; el cliente ofrece `/profile` con validación de repetición y mínimos.
+- `/dashboard` y `/profile` están protegidos en el frontend; la navegación de Administración se oculta para usuarios sin rol Administrador y no reemplaza autorización de servidor.
+- `/api/sql-connection/test` requiere el rol Administrador; análisis de fuentes requiere autenticación, sin restricción por rol.
+- Sesiones server-side en memoria con `sid`, expiración por inactividad configurable y vencimiento absoluto, refresh y revocación en logout. El almacenamiento es local al proceso y se pierde al reiniciar; no sirve como persistencia durable ni coordinación multi-instancia.
+- Auditoría estructurada vía `ILogger` para login exitoso/fallido, logout, sesión expirada, cambio de contraseña y acceso denegado. Es logging operativo, no un registro de auditoría durable; nunca incluye credenciales, hashes, JWT ni cookies.
+- Fallo de refresh/401 centraliza limpieza del estado y redirección a `/login?sessionExpired=1`, coordinando refresh concurrente.
+
+### Brechas pendientes — Fase 1 no completa
+
+- La condición de usuario activo se comprueba al login; revisar estado en cada petición requiere una estrategia DB segura y queda pendiente.
+- Matriz completa de roles/permisos y autorización de cada operación; análisis de fuentes solo exige autenticación.
+- Persistencia durable/distribuida de sesiones y auditoría; administración de cuentas y permisos, recuperación de cuenta y verificación formal de criterios.
+- Los mecanismos in-memory y ILogger son provisionales; no afirmar completitud de Fase 1 ni preparación de producción.
+- Flujos de cuenta/recuperación y verificación formal de todos los criterios de aceptación.
+
 ## Pruebas y aceptación
 
 - Login válido crea sesión.
@@ -264,18 +283,21 @@ Agregar o utilizar una tabla de auditoría de migraciones con:
 
 ## Backend/API
 
+Estado implementado en esta entrega: existe un flujo backend y frontend inicial de validación y carga. Depende de `NetTopologySuite.IO.ShapeFile` y `ProjNet`; requiere `ConnectionStrings:MigrationDb`. Los endpoints `/api/migrations/validate` y `/api/migrations/execute` requieren Administrador. Los archivos están limitados a 256 MiB cada uno y el número de registros a 250.000 por capa. La ejecución usa SqlBulkCopy en lotes de 1.000 hacia tablas temporales por capa dentro de la misma transacción, seguido de un INSERT...SELECT con conversión server-side de WKT a geometry. Los logs backend informan el avance después de cada lote SqlBulkCopy (capa, número de lote, registros procesados y total) y antes/después del INSERT set-based de geometrías; la respuesta del navegador sigue siendo a nivel de request, sin progreso streaming. Al insertar, se preservan las dimensiones disponibles de las geometrías (X/Y/Z/M) en SQL Server `geometry`; se quitan únicamente las etiquetas dimensionales ISO del WKT, no las ordenadas. Si una dimensión disponible no puede serializarse, la carga falla explícitamente. Replace sustituye únicamente las tablas de las capas seleccionadas y conserva las demás; para mantener la seguridad referencial, al reemplazar Manzanas se ponen en NULL `Lotes.IdManzana` y al reemplazar Lotes se ponen en NULL `CodigosFijos.IdLote` antes de borrar las tablas seleccionadas en orden dependiente. Append no deduplica; no se repara geometría ni se crean relaciones espaciales. La validación actualmente no entrega una muestra de 20 registros.
+
 Crear servicios para:
 
 - probar conexión SQL;
 - recibir y agrupar archivos fuente;
 - leer contenido SHP/DBF/PRJ;
+- aceptar PRJ explícitos EPSG:4326 sin transformación o EPSG:32720 con reproyección a EPSG:4326; rechazar PRJ ausentes, ambiguos, ilegibles o no soportados;
 - validar integridad;
 - detectar geometría vacía o inválida;
 - validar el CRS declarado;
 - reproyectar a 4326 cuando corresponda;
 - mostrar preview de registros;
 - validar el mapeo DBF → SQL;
-- elegir modo reemplazo o append;
+- elegir modo reemplazo o append; replace admite una o más capas aprobadas y solo reemplaza las seleccionadas, manteniendo las no seleccionadas salvo las desvinculaciones de FK requeridas;
 - cargar por lotes dentro de transacción;
 - cancelar de forma segura;
 - informar progreso;
@@ -286,6 +308,8 @@ Crear servicios para:
 La ausencia de `.prj`, un CRS incompatible o una conversión no autorizada debe bloquear la carga o requerir una decisión explícita.
 
 ## Frontend
+
+Implementado inicialmente en `/migration`, visible solo para `Administrador`, con selección de archivos, validación, elección `replace`/`append`, cancelación del request y resumen de resultados. La vista no guarda archivos en el navegador y no ofrece todavía preview de 20 registros ni progreso streaming.
 
 Construir una vista tipo wizard:
 

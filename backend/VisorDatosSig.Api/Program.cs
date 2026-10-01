@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using Microsoft.IdentityModel.Tokens;
 using VisorDatosSig.Api;
 
@@ -30,6 +31,7 @@ builder.Services.AddSingleton<AuthService>();
 var sessionRegistry = new SessionRegistry(builder.Configuration);
 builder.Services.AddSingleton(sessionRegistry);
 builder.Services.AddSingleton<AuthAuditService>();
+builder.Services.AddScoped<ShapefileMigrationService>();
 var tokenService = new JwtTokenService(builder.Configuration, sessionRegistry);
 builder.Services.AddSingleton(tokenService);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
@@ -154,6 +156,42 @@ app.MapPost("/api/auth/logout", (HttpContext context, SessionRegistry sessions, 
     context.Response.Cookies.Delete(JwtTokenService.RefreshCookie, options);
     return Results.NoContent();
 }).AllowAnonymous();
+
+app.MapPost("/api/migrations/validate", async ([FromForm] IFormFileCollection files, ShapefileMigrationService migration, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await migration.ValidateAsync(files, cancellationToken);
+        return result.Valid ? Results.Ok(result) : Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Shapefile validation failed", detail: string.Join(" ", result.Errors), extensions: new Dictionary<string, object?> { ["validation"] = result });
+    }
+    catch (OperationCanceledException) { return Results.Problem(statusCode: 400, title: "Validation cancelled"); }
+}).DisableAntiforgery().RequireAuthorization("Administrator");
+
+app.MapPost("/api/migrations/execute", async ([FromForm] IFormFileCollection files, [FromForm] string mode, ShapefileMigrationService migration, ClaimsPrincipal principal, AuthAuditService audit, ILogger<Program> logger, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var user = JwtTokenService.UserFromPrincipal(principal);
+        var result = await migration.ExecuteAsync(files, mode, user.Id, cancellationToken);
+        audit.Record("ShapefileMigrationCompleted", user.Id, reason: mode);
+        return Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return Results.Problem(statusCode: 400, title: "Invalid migration request", detail: ex.Message); }
+    catch (InvalidDataException ex) { return Results.Problem(statusCode: 400, title: "Shapefile validation failed", detail: ex.Message); }
+    catch (OperationCanceledException) { audit.Record("ShapefileMigrationCancelled"); return Results.Problem(statusCode: 400, title: "Migration cancelled"); }
+    catch (SqlException exception)
+    {
+        logger.LogError(exception, "Shapefile migration failed in SQL Server. Mode={Mode}", mode);
+        audit.Record("ShapefileMigrationFailed", reason: $"sql:{exception.Number}");
+        return Results.Problem(statusCode: StatusCodes.Status502BadGateway, title: "Migration database error", detail: "La base de datos rechazó la migración. Revisá la consola del backend para ver el detalle técnico.");
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Shapefile migration failed before completion. Mode={Mode}", mode);
+        audit.Record("ShapefileMigrationFailed", reason: exception.GetType().Name);
+        return Results.Problem(statusCode: 500, title: "Migration failed", detail: "La migración no pudo completarse. Revisá la consola del backend para ver el detalle técnico.");
+    }
+}).DisableAntiforgery().RequireAuthorization("Administrator");
 
 app.MapPost("/api/shapefile-sources/analyze", ([FromForm] IFormFileCollection files) =>
 {

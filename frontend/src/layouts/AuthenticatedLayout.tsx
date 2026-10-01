@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { Brand } from "@/components/Brand";
 import { useAuth } from "@/components/AuthProvider";
 
-type NavigationKey = "Inicio" | "Visor de mapa" | "Consultas" | "Identificación" | "Administración";
+type NavigationKey = "Inicio" | "Visor de mapa" | "Consultas" | "Identificación" | "Administración" | "Migración";
 type AuthenticatedLayoutProps = { children: ReactNode; activeItem: NavigationKey };
 
 const navigation = [
@@ -13,12 +13,16 @@ const navigation = [
   { label: "Consultas", icon: Search, href: "#" },
   { label: "Identificación", icon: Crosshair, href: "#" },
   { label: "Administración", icon: UsersRound, href: "#" },
+  { label: "Migración", icon: Map, href: "/migration" },
 ] as const;
 
 export function AuthenticatedLayout({ children, activeItem }: AuthenticatedLayoutProps) {
   const { user, logout } = useAuth();
   const displayName = user?.name || "Lucía Castro";
-  const visibleNavigation = navigation.filter(({ label }) => label !== "Administración" || user?.roles.includes("Administrador"));
+  const visibleNavigation = navigation.filter(({ label }) =>
+    (label !== "Administración" || user?.roles.includes("Administrador")) &&
+    (label !== "Migración" || user?.roles.includes("Administrador"))
+  );
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A]">
       <header className="flex h-[68px] items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">

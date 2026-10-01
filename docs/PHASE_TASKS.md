@@ -30,13 +30,13 @@ Completá estas tareas en orden. Son una línea temprana de preparación; no equ
 Hacé las issues en este orden. Antes de cerrar la migración, resolvé con el equipo las decisiones abiertas sobre el diseño físico oficial.
 
 1. [x] **SIG-15 — Configurar y probar conexión a SQL Server.** Definí y configurá los parámetros de conexión; comprobá que una conexión inválida bloquee el inicio y muestre un error claro.
-1. [ ] **SIG-16 — Seleccionar archivos fuente Shapefile.** Permití elegir una carpeta o archivos `.shp`; detectá y agrupá `.shx`, `.dbf` y `.prj`, e informá componentes faltantes.
+1. [ ] **SIG-16 — Seleccionar archivos fuente Shapefile.** Permití elegir una carpeta o archivos `.shp`; detectá y agrupá `.shx`, `.dbf` y `.prj`, e informá componentes faltantes. Existe selección frontend y validación/carga multipart; falta verificación formal de aceptación y soporte de selección de carpeta.
 1. [ ] **SIG-17 — Reconocer las capas geográficas oficiales.** Identificá Manzanas, Lotes, CodigosFijos y Vias; mostrale al operador los metadatos disponibles de cada capa.
-1. [ ] **SIG-18 — Validar integridad de Shapefiles antes de cargar.** Comprobá archivos asociados, lectura y consistencia; detené la carga si faltan componentes requeridos o los datos no son compatibles.
+1. [ ] **SIG-18 — Validar integridad de Shapefiles antes de cargar.** Comprobá archivos asociados, lectura y consistencia; detené la carga si faltan componentes requeridos o los datos no son compatibles. Fundación backend implementada; falta integración/UI y aceptación formal.
 1. [ ] **SIG-19 — Validar referencia espacial declarada.** Leé el `.prj` y verificá WGS 84 / SRID 4326; nunca asignes el SRID silenciosamente.
 1. [ ] **SIG-20 — Previsualizar registros y mapeo de campos.** Mostrá al menos 20 registros (o los disponibles si hay menos), sus valores, geometría y mapeo antes de cargar.
 1. [ ] **SIG-21 — Mapear campos DBF a columnas SQL.** Contrastá campos, tipos, claves, relaciones y nulabilidad con el diseño físico oficial; validá conversiones antes de insertar. **Esperá el diseño físico y los campos DBF oficiales.**
-1. [ ] **SIG-22 — Elegir un modo seguro de migración.** Implementá reemplazo seguro y append; definí su comportamiento con el equipo y respetá las claves naturales oficiales. **No inventes esas claves.**
+1. [ ] **SIG-22 — Elegir un modo seguro de migración.** Implementá reemplazo seguro por una o más capas seleccionadas y append; replace conserva las capas no seleccionadas, salvo las desvinculaciones de FK requeridas al reemplazar Manzanas o Lotes. Respetá las claves naturales oficiales. **No inventes esas claves.**
 1. [ ] **SIG-25 — Validar y reportar geometrías por registro.** Detectá geometrías inválidas o vacías y registrá causa y registro; repará solo con reglas aprobadas.
 1. [ ] **SIG-26 — Prevenir y reportar registros duplicados.** En append, detectá y contá duplicados usando la clave natural o regla oficial; registrá los omitidos. **Depende del diseño físico oficial.**
 1. [ ] **SIG-23 — Cargar datos dentro de una transacción.** Cargá por lotes; confirmá solo una operación consistente y hacé rollback ante un error crítico o pérdida de conexión.
@@ -55,15 +55,15 @@ Hacé las issues en este orden. Antes de cerrar la migración, resolvé con el e
 
 ### 2.1 Identidad, permisos y seguridad
 
-1. [ ] **SIG-32 — Iniciar sesión con usuario y contraseña.** Validá credenciales y creá una sesión únicamente para usuarios válidos.
+1. [x] **SIG-32 — Iniciar sesión con usuario y contraseña.** Validá credenciales y creá una sesión únicamente para usuarios válidos.
 1. [ ] **SIG-33 — Administrar perfiles Administrador y Consultor.** Definí los perfiles y sus permisos con el equipo; contrastalos con los roles existentes en los scripts SQL.
 1. [ ] **SIG-34 — Aplicar autorización en el servidor.** Protegé cada operación; no dependas de ocultar opciones en la interfaz como control de acceso.
 1. [ ] **SIG-81 — Administrar perfiles y permisos.** Implementá la asignación administrativa de permisos de acuerdo con la matriz aprobada. Revisá su posible solapamiento con la definición de perfiles anterior.
-1. [ ] **SIG-35 — Cerrar una sesión de forma segura.** Invalidá la sesión al salir y bloqueá el acceso posterior a recursos protegidos.
-1. [ ] **SIG-36 — Expirar sesiones inactivas.** Aplicá el período definido por el equipo; bloqueá solicitudes protegidas tras el vencimiento.
+1. [ ] **SIG-35 — Cerrar una sesión de forma segura.** Invalidá la sesión al salir y bloqueá el acceso posterior a recursos protegidos. La revocación implementada vive en memoria del proceso; falta persistencia durable y verificación formal de aceptación.
+1. [ ] **SIG-36 — Expirar sesiones inactivas.** Aplicá el período definido por el equipo; bloqueá solicitudes protegidas tras el vencimiento. Hay expiración in-memory configurable (30 minutos por defecto) y vencimiento absoluto alineado al refresh (14 días); falta persistencia durable y verificación formal.
 1. [ ] **SIG-38 — Administrar cuentas de usuario.** Permití crear, editar, activar, bloquear y asignar perfil a usuarios; definí el flujo de restablecimiento.
 1. [ ] **SIG-39 — Cambiar mi contraseña.** Permití que Administrador y Consultor cambien sus credenciales con la política aprobada.
-1. [ ] **SIG-37 — Registrar eventos de autenticación y acceso.** Registrá inicios de sesión exitosos y fallidos, cierres de sesión y operaciones administrativas relevantes.
+1. [ ] **SIG-37 — Registrar eventos de autenticación y acceso.** Hay eventos básicos vía ILogger (login exitoso/fallido, logout, sesión expirada, cambio de contraseña y acceso denegado); falta almacenamiento durable y cobertura completa de eventos administrativos.
 1. [ ] **SIG-85 — Consultar mi perfil.** Permití que cada usuario autenticado consulte los datos de perfil disponibles y autorizados.
 1. [ ] **SIG-80 — Mostrar navegación según el perfil autenticado.** Mostrá solo las opciones permitidas, manteniendo la autorización del servidor como control independiente.
 
