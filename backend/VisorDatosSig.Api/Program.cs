@@ -107,6 +107,20 @@ app.MapPost("/api/auth/refresh", (HttpContext context, JwtTokenService tokens) =
 }).AllowAnonymous();
 
 app.MapGet("/api/auth/session", (ClaimsPrincipal principal) => Results.Ok(Envelope(JwtTokenService.UserFromPrincipal(principal)))).RequireAuthorization();
+app.MapGet("/api/auth/me", (ClaimsPrincipal principal) => Results.Ok(Envelope(JwtTokenService.UserFromPrincipal(principal)))).RequireAuthorization();
+app.MapPost("/api/auth/change-password", async (ChangePasswordRequest request, ClaimsPrincipal principal, AuthService auth, CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrEmpty(request.NewPassword) || request.NewPassword.Length < 8) return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid request", detail: "La nueva contraseña debe tener al menos 8 caracteres.");
+    try
+    {
+        var changed = await auth.ChangePasswordAsync(JwtTokenService.UserFromPrincipal(principal), request.CurrentPassword ?? "", request.NewPassword, cancellationToken);
+        return changed ? Results.NoContent() : Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Unauthorized", detail: "No se pudo validar la contraseña actual.");
+    }
+    catch (AuthenticationInfrastructureException)
+    {
+        return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "Service Unavailable", detail: "El servicio de autenticación no está disponible.");
+    }
+}).RequireAuthorization();
 
 app.MapPost("/api/auth/logout", (HttpContext context) =>
 {
@@ -132,9 +146,10 @@ app.MapPost("/api/sql-connection/test", async (ISqlConnectionProbe probe, Cancel
         _ => StatusCodes.Status502BadGateway
     };
     return Results.Json(new { status = result.Status.ToString(), message = result.Message }, statusCode: status);
-});
+}).RequireAuthorization();
 
 app.Run();
 
 public sealed record LoginRequest(string Login, string Password, bool RememberMe);
+public sealed record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
 public partial class Program;

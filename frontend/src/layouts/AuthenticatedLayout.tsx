@@ -18,6 +18,7 @@ const navigation = [
 export function AuthenticatedLayout({ children, activeItem }: AuthenticatedLayoutProps) {
   const { user, logout } = useAuth();
   const displayName = user?.name || "Lucía Castro";
+  const visibleNavigation = navigation.filter(({ label }) => label !== "Administración" || user?.roles.includes("Administrador"));
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A]">
       <header className="flex h-[68px] items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
@@ -29,17 +30,17 @@ export function AuthenticatedLayout({ children, activeItem }: AuthenticatedLayou
           <span className="hidden text-sm font-medium text-slate-600 sm:inline">Operación territorial</span>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
-          <div className="hidden text-right sm:block">
+          <Link to="/profile" className="hidden text-right text-inherit no-underline sm:block" aria-label={`Perfil de ${displayName}`}>
             <p className="m-0 text-sm font-semibold">{displayName}</p>
-            <p className="m-0 text-xs text-slate-500">{user?.roles?.join(" · ") || "Administradora"}</p>
-          </div>
-          <div className="grid size-9 place-items-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700" aria-label={`Avatar de ${displayName}`}>
+            <p className="m-0 text-xs text-slate-500">{user?.roles?.join(" · ") || "Usuario"}</p>
+          </Link>
+          <Link to="/profile" className="grid size-9 place-items-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700 no-underline" aria-label={`Perfil de ${displayName}`}>
             {displayName
               .split(/\s+/)
               .map((part) => part[0])
               .slice(0, 2)
               .join("")}
-          </div>
+          </Link>
           <button type="button" className="flex h-9 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 cursor-pointer" onClick={() => void logout()}>
             <LogOut size={16} aria-hidden="true" />
             <span className="hidden sm:inline">Cerrar sesión</span>
@@ -54,7 +55,7 @@ export function AuthenticatedLayout({ children, activeItem }: AuthenticatedLayou
           </div>
           <p className="mb-3 px-3 text-[10px] font-semibold tracking-[.14em] text-slate-500">ESPACIOS DE TRABAJO</p>
           <nav aria-label="Navegación principal" className="flex gap-2 overflow-x-auto md:grid md:gap-1">
-            {navigation.map(({ label, icon: Icon, href }) => {
+            {visibleNavigation.map(({ label, icon: Icon, href }) => {
               const active = label === activeItem;
               return (
                 <Link key={label} to={href} aria-current={active ? "page" : undefined} className={`flex shrink-0 items-center gap-3 rounded-md px-3 py-2.5 text-sm no-underline transition-colors ${active ? "bg-blue-600 font-semibold text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"}`}>

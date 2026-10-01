@@ -39,3 +39,11 @@ export async function getSession() {
 }
 export async function login(login: string, password: string, rememberMe: boolean) { return (await request("/api/auth/login", { method: "POST", body: JSON.stringify({ login, password, rememberMe }) }))!.data.user; }
 export async function logout() { await request("/api/auth/logout", { method: "POST", body: "{}" }); }
+export async function changePassword(currentPassword: string, newPassword: string) {
+  const response = await apiFetch("/api/auth/change-password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+  if (response.ok) return;
+  if (response.status === 401) throw new Error("La contraseña actual no es correcta.");
+  if (response.status === 400) throw new Error("La nueva contraseña debe tener al menos 8 caracteres.");
+  if (response.status === 503) throw new Error("El servicio no está disponible. Intentá nuevamente más tarde.");
+  throw new Error("No se pudo cambiar la contraseña. Intentá nuevamente.");
+}
