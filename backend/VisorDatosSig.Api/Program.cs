@@ -33,6 +33,7 @@ builder.Services.AddSingleton(sessionRegistry);
 builder.Services.AddSingleton<AuthAuditService>();
 builder.Services.AddScoped<ShapefileMigrationService>();
 builder.Services.AddScoped<LayerQueryService>();
+builder.Services.AddScoped<SearchQueryService>();
 var tokenService = new JwtTokenService(builder.Configuration, sessionRegistry);
 builder.Services.AddSingleton(tokenService);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
@@ -195,6 +196,26 @@ app.MapPost("/api/migrations/execute", async ([FromForm] IFormFileCollection fil
 }).DisableAntiforgery().RequireAuthorization("Administrator");
 
 app.MapGet("/api/layers", (LayerQueryService layers) => Results.Ok(layers.Catalog())).RequireAuthorization();
+app.MapGet("/api/search", async (string layer, string? q, int? page, int? pageSize, string? sortBy, string? sortDirection, HttpRequest request, SearchQueryService search, ILogger<Program> logger, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var filters = request.Query.Where(x => !new[] { "layer", "q", "page", "pageSize", "sortBy", "sortDirection" }.Contains(x.Key, StringComparer.OrdinalIgnoreCase)).ToDictionary(x => x.Key, x => (string?)x.Value.ToString(), StringComparer.OrdinalIgnoreCase);
+        return Results.Ok(await search.SearchAsync(layer, q, page ?? 1, pageSize, sortBy, sortDirection, filters, cancellationToken));
+    }
+    catch (KeyNotFoundException) { return Results.Problem(statusCode: 404, title: "Layer not found"); }
+    catch (ArgumentException ex) { return Results.Problem(statusCode: 400, title: "Invalid search query", detail: ex.Message); }
+    catch (SqlException exception)
+    {
+        logger.LogError(exception, "Search query failed in SQL Server. Layer={Layer} Page={Page} PageSize={PageSize}", layer, page ?? 1, pageSize ?? SearchQueryService.DefaultPageSize);
+        return Results.Problem(statusCode: 503, title: "Search data unavailable", detail: "No se pudieron consultar los resultados.");
+    }
+}).RequireAuthorization();
+app.MapGet("/api/search/options/via-types", async (SearchQueryService search, CancellationToken cancellationToken) =>
+{
+    try { return Results.Ok(new { data = new { values = await search.GetViaTypesAsync(cancellationToken) } }); }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Search options unavailable", detail: "No se pudieron consultar las opciones de vías."); }
+}).RequireAuthorization();
 app.MapGet("/api/layers/{layer}/geojson", async (string layer, string? bbox, int? limit, LayerQueryService query, CancellationToken cancellationToken) =>
 {
     try { return Results.Ok(await query.GeoJsonAsync(layer, bbox, limit, cancellationToken)); }
