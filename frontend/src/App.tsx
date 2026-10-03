@@ -5,6 +5,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { MigrationPage } from "./pages/MigrationPage";
 import { MapPage } from "./pages/MapPage";
+import { QueriesPage } from "./pages/QueriesPage";
 import { AuthProvider } from "./components/AuthProvider";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
@@ -18,6 +19,7 @@ export function App() {
 				<Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
 				<Route path="/migration" element={<ProtectedRoute><MigrationPage /></ProtectedRoute>} />
 				<Route path="/map" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
+				<Route path="/queries" element={<ProtectedRoute><QueriesPage /></ProtectedRoute>} />
 				<Route path="*" element={<LandingPage />} />
 			</Routes>
 		</AuthProvider>
