@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { LockKeyhole, UserRound } from "lucide-react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Brand } from "@/components/Brand";
-import { useAuth } from "@/components/AuthProvider";
+import { Button } from "@/Presentation/Components/ui/button";
+import { Card } from "@/Presentation/Components/ui/card";
+import { Input } from "@/Presentation/Components/ui/input";
+import { Brand } from "@/Presentation/Components/Brand";
+import { useAuth } from "@/Presentation/Components/AuthProvider";
 
 export function LoginPage() {
   const [login, setLogin] = useState("");

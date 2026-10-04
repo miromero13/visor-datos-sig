@@ -49,21 +49,34 @@ SQL Server sigue siendo accedido por el backend. Esta tarea no cambia consultas 
 
 ## 4. Arquitectura del frontend
 
-El frontend utiliza React + TypeScript y Leaflet. Su organización futura se describe conceptualmente por responsabilidades:
+El frontend utiliza React + TypeScript y Leaflet, y se organiza por capas en `frontend/src`. Esta separación es principalmente organizativa y no modifica la lógica existente.
 
-### Presentación
+### Presentation
 
-Incluye páginas, componentes, layouts, elementos UI y la visualización del mapa. Actualmente estos elementos se encuentran principalmente en `frontend/src/pages`, `frontend/src/components` y `frontend/src/layouts`.
+Responsabilidad: interfaz visual e interacción con el usuario.
 
-### Aplicación / servicios
+- `frontend/src/Presentation/Pages` contiene las páginas y sus pruebas asociadas.
+- `frontend/src/Presentation/Components` contiene componentes de presentación.
+- `frontend/src/Presentation/Components/ui` contiene elementos UI.
+- `frontend/src/Presentation/Layouts` contiene los layouts de la interfaz.
 
-Incluye la lógica de interacción con las funcionalidades del sistema, el manejo de autenticación del lado cliente, el consumo de datos y la coordinación entre vistas y servicios.
+### Application
 
-### Infraestructura / comunicación
+Responsabilidad: servicios del frontend que coordinan funcionalidades y consumo de datos.
 
-Incluye las funciones que realizan solicitudes HTTP, la comunicación con ASP.NET Core Web API y el consumo de JSON y GeoJSON. Actualmente se concentra principalmente en `frontend/src/lib`, con módulos para autenticación, capas, migraciones y fuentes Shapefile.
+`frontend/src/Application/Services` contiene:
 
-En esta ejecución el frontend solamente se documenta. No ha sido reorganizado todavía.
+- `auth.ts`
+- `layers.ts`
+- `migrations.ts`
+
+### Infrastructure
+
+Responsabilidad: detalles técnicos de comunicación específica con servicios externos o backend.
+
+`frontend/src/Infrastructure/Api` contiene:
+
+- `shapefileSources.ts`
 
 ## 5. Dependencias entre capas
 
@@ -113,4 +126,25 @@ backend/
     └── VisorDatosSig.Api.csproj
 ```
 
-La reorganización física del frontend queda pendiente para una siguiente tarea.
+```text
+frontend/
+└── src/
+    ├── App.tsx
+    ├── main.tsx
+    ├── styles.css
+    ├── vite-env.d.ts
+    ├── Presentation/
+    │   ├── Pages/
+    │   ├── Components/
+    │   │   └── ui/
+    │   └── Layouts/
+    ├── Application/
+    │   └── Services/
+    │       ├── auth.ts
+    │       ├── layers.ts
+    │       └── migrations.ts
+    ├── Infrastructure/
+    │   └── Api/
+    │       └── shapefileSources.ts
+    └── test/
+```

@@ -1,13 +1,13 @@
 import { Route, Routes } from "react-router-dom";
-import { LandingPage } from "./pages/LandingPage";
-import { LoginPage } from "./pages/LoginPage";
-import { DashboardPage } from "./pages/DashboardPage";
-import { ProfilePage } from "./pages/ProfilePage";
-import { MigrationPage } from "./pages/MigrationPage";
-import { MapPage } from "./pages/MapPage";
-import { QueriesPage } from "./pages/QueriesPage";
-import { AuthProvider } from "./components/AuthProvider";
-import { ProtectedRoute } from "./components/ProtectedRoute";
+import { LandingPage } from "./Presentation/Pages/LandingPage";
+import { LoginPage } from "./Presentation/Pages/LoginPage";
+import { DashboardPage } from "./Presentation/Pages/DashboardPage";
+import { ProfilePage } from "./Presentation/Pages/ProfilePage";
+import { MigrationPage } from "./Presentation/Pages/MigrationPage";
+import { MapPage } from "./Presentation/Pages/MapPage";
+import { QueriesPage } from "./Presentation/Pages/QueriesPage";
+import { AuthProvider } from "./Presentation/Components/AuthProvider";
+import { ProtectedRoute } from "./Presentation/Components/ProtectedRoute";
 
 export function App() {
 	return (

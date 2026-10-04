@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import type { ShapefileLayer } from "@/lib/shapefileSources";
-import { apiFetch } from "@/lib/auth";
-import { Header } from "@/components/Header";
-import { Button } from "@/components/ui/button";
+import type { ShapefileLayer } from "@/Infrastructure/Api/shapefileSources";
+import { apiFetch } from "@/Application/Services/auth";
+import { Header } from "@/Presentation/Components/Header";
+import { Button } from "@/Presentation/Components/ui/button";
 
 export function ShapefileSourcePage() {
   const [files, setFiles] = useState<File[]>([]);

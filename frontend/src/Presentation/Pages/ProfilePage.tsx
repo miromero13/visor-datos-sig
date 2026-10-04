@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { LockKeyhole, UserRound } from "lucide-react";
-import { AuthenticatedLayout } from "@/layouts/AuthenticatedLayout";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { useAuth } from "@/components/AuthProvider";
+import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
+import { Button } from "@/Presentation/Components/ui/button";
+import { Card } from "@/Presentation/Components/ui/card";
+import { Input } from "@/Presentation/Components/ui/input";
+import { useAuth } from "@/Presentation/Components/AuthProvider";
 
 export function ProfilePage() {
   const { user, changePassword } = useAuth();

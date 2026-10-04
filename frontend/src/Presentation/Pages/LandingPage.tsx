@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
-import { Brand } from "@/components/Brand";
-import { Header } from "@/components/Header";
-import { MapIllustration } from "@/components/MapIllustration";
-import { Button } from "@/components/ui/button";
+import { Brand } from "@/Presentation/Components/Brand";
+import { Header } from "@/Presentation/Components/Header";
+import { MapIllustration } from "@/Presentation/Components/MapIllustration";
+import { Button } from "@/Presentation/Components/ui/button";
 
 const technologies = [
 	["Frontend", "React + TypeScript"],

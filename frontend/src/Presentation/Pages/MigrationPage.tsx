@@ -1,10 +1,10 @@
 import { useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { CheckCircle2, ChevronDown, FileCheck2, FolderOpen, Play, X } from "lucide-react";
-import { useAuth } from "@/components/AuthProvider";
-import { AuthenticatedLayout } from "@/layouts/AuthenticatedLayout";
-import { Button } from "@/components/ui/button";
-import { executeMigration, simulateFixedCodeStates, validateMigration, type FixedCodeSimulationResult, type MigrationExecution, type MigrationMode, type MigrationValidation } from "@/lib/migrations";
+import { useAuth } from "@/Presentation/Components/AuthProvider";
+import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
+import { Button } from "@/Presentation/Components/ui/button";
+import { executeMigration, simulateFixedCodeStates, validateMigration, type FixedCodeSimulationResult, type MigrationExecution, type MigrationMode, type MigrationValidation } from "@/Application/Services/migrations";
 
 const approvedLayers = ["Exp_CodigoFijo_4326", "Exp_MapaBase_LOTES_4326", "Exp_MapaBase_MZA_4326", "Exp_MapaBase_VIAS_4326"] as const;
 const components = [".shp", ".shx", ".dbf", ".prj"] as const;

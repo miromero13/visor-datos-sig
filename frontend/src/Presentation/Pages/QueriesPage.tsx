@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, MapPin } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { AuthenticatedLayout } from "@/layouts/AuthenticatedLayout";
-import { getLayers, getViaTypes, layerFields, searchAllLayers, searchLayer, type Layer, type LayerId, type SearchResult } from "@/lib/layers";
+import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
+import { getLayers, getViaTypes, layerFields, searchAllLayers, searchLayer, type Layer, type LayerId, type SearchResult } from "@/Application/Services/layers";
 
 const allLayers = "all" as const;
 type LayerChoice = LayerId | typeof allLayers;

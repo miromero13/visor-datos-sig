@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { changePassword as changePasswordRequest, configureSessionExpiry, getSession, login as loginRequest, logout as logoutRequest, type AuthUser } from "@/lib/auth";
+import { changePassword as changePasswordRequest, configureSessionExpiry, getSession, login as loginRequest, logout as logoutRequest, type AuthUser } from "@/Application/Services/auth";
 
 interface AuthContextValue { user: AuthUser | null; loading: boolean; error: string; login(login: string, password: string, rememberMe: boolean): Promise<void>; logout(): Promise<void>; changePassword(currentPassword: string, newPassword: string): Promise<void> }
 const AuthContext = createContext<AuthContextValue | null>(null);

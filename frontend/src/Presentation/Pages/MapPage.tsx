@@ -5,8 +5,8 @@ import L from "leaflet";
 import { createRoot } from "react-dom/client";
 import html2canvas from "html2canvas";
 import { Camera, Crosshair, Maximize, Printer, Plus, Minus, ChevronDown } from "lucide-react";
-import { AuthenticatedLayout } from "@/layouts/AuthenticatedLayout";
-import { getLayerExtent, getLayerFeatures, getAllFixedCodeFeatures, getLayers, searchLayer, type Extent, type Feature, type FeatureCollection, type Layer, type LayerId, type SearchResult } from "@/lib/layers";
+import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
+import { getLayerExtent, getLayerFeatures, getAllFixedCodeFeatures, getLayers, searchLayer, type Extent, type Feature, type FeatureCollection, type Layer, type LayerId, type SearchResult } from "@/Application/Services/layers";
 import "leaflet/dist/leaflet.css";
 
 const colors: Record<LayerId, string> = { CodigosFijos: "#e11d48", Lotes: "#0ea5e9", Manzanas: "#7c3aed", Vias: "#f59e0b" };

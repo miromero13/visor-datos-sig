@@ -1,6 +1,6 @@
-import { AuthenticatedLayout } from "@/layouts/AuthenticatedLayout";
-import { Card } from "@/components/ui/card";
-import { useAuth } from "@/components/AuthProvider";
+import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
+import { Card } from "@/Presentation/Components/ui/card";
+import { useAuth } from "@/Presentation/Components/AuthProvider";
 const indicators = [
   { label: "Manzanas", value: "863", unit: "Polígonos", color: "bg-violet-100 text-violet-700", mark: "▦" },
   { label: "Lotes", value: "15.281", unit: "Polígonos", color: "bg-blue-100 text-blue-700", mark: "⌗" },

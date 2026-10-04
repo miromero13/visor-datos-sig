@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { Headphones, House, LogOut, Map, Search, UsersRound, Crosshair, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Brand } from "@/components/Brand";
-import { useAuth } from "@/components/AuthProvider";
+import { Brand } from "@/Presentation/Components/Brand";
+import { useAuth } from "@/Presentation/Components/AuthProvider";
 
 type NavigationKey = "Inicio" | "Visor de mapa" | "Consultas" | "Identificación" | "Administración" | "Migración";
 type AuthenticatedLayoutProps = { children: ReactNode; activeItem: NavigationKey };

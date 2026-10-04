@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/auth";
+import { apiFetch } from "@/Application/Services/auth";
 
 export type MigrationMode = "replace" | "append";
 export interface MigrationLayerPreview {
