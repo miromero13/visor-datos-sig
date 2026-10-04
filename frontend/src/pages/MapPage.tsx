@@ -184,6 +184,8 @@ export function MapPage() {
   const selectedRouteLayer = requestedLayer && allowedLayerIds.has(requestedLayer as LayerId) ? requestedLayer as LayerId : null;
   const selectedRouteId = requestedId && /^\d+$/.test(requestedId) && Number.isSafeInteger(Number(requestedId)) ? Number(requestedId) : null;
   const [basemapId, setBasemapId] = useState<BasemapId>("osm");
+  const [sidebarTab, setSidebarTab] = useState("search");
+  const sidebarTabs = [{ id: "search", label: "Buscar" }, { id: "layers", label: "Capas" }, { id: "legend", label: "Leyenda" }];
   const workspaceRef = useRef<HTMLDivElement>(null);
   const mapCanvasRef = useRef<HTMLElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -266,6 +268,7 @@ export function MapPage() {
     }
   };
   const selectMap = (feature: Feature, layer: Layer) => { setSelected({ layer, feature }); setTarget(null); };
+  const clearFixedFilters = () => { setFixedNombreInput(""); setFixedNombre(""); setFixedEstado(""); setFixedData(null); };
   const clearSelection = useCallback(() => { setSelected(null); setTarget(null); }, []);
   return <AuthenticatedLayout activeItem="Visor de mapa"><main className="map-page">
     <div className="map-heading"><div><p className="map-eyebrow">INFORMACIÓN TERRITORIAL</p><h1>Visor de mapa</h1><p>Explorá las capas geográficas disponibles.</p></div><span className="map-coordinate-note">Sistema de coordenadas · WGS 84</span></div>
@@ -273,6 +276,73 @@ export function MapPage() {
     {exportError && <div className="map-alert" role="alert">{exportError}</div>}
     {printImage && <div className="map-print-overlay"><img src={printImage} alt="Vista actual del mapa" /></div>}
     <div className="map-workspace" ref={workspaceRef}><section className="map-canvas" ref={mapCanvasRef} aria-label="Mapa interactivo"><MapContainer center={initialMapCenter} zoom={12} maxZoom={MAX_MAP_ZOOM} zoomControl={false} scrollWheelZoom preferCanvas className="leaflet-map"><Pane name={FIXED_CODES_PANE} style={{ zIndex: 625 }} /><MapClickHandler onEmptyClick={clearSelection} /><MapToolbarControl extent={extent} fullscreen={fullscreen} toggleFullscreen={() => void toggleFullscreen()} printMap={() => void printMap()} exportPng={() => void exportPng()} /><MapSizeSynchronizer extent={extent} target={target} collections={visibleCollections} /><LoadedDataFit collections={visibleCollections} target={target} />{basemaps[basemapId].url && <TileLayer key={basemapId} attribution={basemaps[basemapId].attribution} url={basemaps[basemapId].url} crossOrigin="anonymous" />}<MapView target={target} targetLayer={selected?.layer.id ?? target?.layer ?? null} fixedRenderer={fixedRenderer} />{activeLayers.map(layer => { const collection = layer.id === "CodigosFijos" ? fixedData : data[layer.id]; if (!collection) return null; return <ZoomStyledGeoJSON key={`${layer.id}-${layer.id === "CodigosFijos" ? `${fixedEstado}-${fixedNombre}` : "all"}`} layer={layer} data={collection as GeoJSON.FeatureCollection} onSelect={feature => selectMap(feature, layer)} />; })}</MapContainer>{!loading && activeLayers.length > 0 && activeLayers.every(layer => (layer.id === "CodigosFijos" ? fixedData : data[layer.id])?.features.length === 0) && <div className="map-empty">No hay elementos geográficos para mostrar.</div>}{selected && <aside className="map-feature-card" aria-label="Atributos del elemento seleccionado"><div className="map-feature-card-heading"><div><h2>Detalle</h2><p className="map-detail-layer">{selected.layer.label}</p></div><button type="button" className="map-feature-card-close" aria-label="Cerrar detalle del elemento" onClick={() => { setSelected(null); setTarget(null); }}>×</button></div><dl>{Object.entries(selected.feature.properties).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value == null ? "—" : String(value)}</dd></div>)}</dl></aside>}</section>
-      <aside className="map-sidebar" aria-label="Capas del mapa"><h2>Capas</h2><p className="map-muted">Activá o desactivá la información</p><label className="map-basemap-label" htmlFor="map-basemap">Mapa base</label><select id="map-basemap" className="map-basemap-select" value={basemapId} onChange={event => setBasemapId(event.target.value as BasemapId)}>{Object.entries(basemaps).map(([id, basemap]) => <option key={id} value={id}>{basemap.label}</option>)}</select>{loading ? <p role="status">Cargando capas…</p> : orderedLayers.map(layer => <div key={layer.id}><div className="map-layer-row"><label><input type="checkbox" checked={visible.has(layer.id)} onChange={event => setLayerVisible(layer.id, event.target.checked)} /><span className="map-swatch" style={{ backgroundColor: colors[layer.id] }} /><span>{layer.label}</span></label><button type="button" title={`Acercar a ${layer.label}`} onClick={() => void fitLayer(layer.id)} aria-label={`Acercar a ${layer.label}`}>⌖</button></div>{layer.id === "CodigosFijos" && visible.has(layer.id) && <div className="map-fixed-filters"><label htmlFor="fixed-state">Estado</label><select id="fixed-state" className="map-basemap-select" value={fixedEstado} onChange={event => setFixedEstado(event.target.value)}><option value="">Todos los estados</option>{fixedStates.map(state => <option key={state.value} value={state.value}>{state.label}</option>)}</select><label htmlFor="fixed-owner">Nombre del propietario</label><input id="fixed-owner" className="map-fixed-owner" type="search" value={fixedNombreInput} onChange={event => setFixedNombreInput(event.target.value)} placeholder="Buscar nombre…" />{fixedLoading && <p role="status">Cargando códigos fijos…</p>}{fixedError && <p className="map-filter-error" role="alert">{fixedError}</p>}{!fixedLoading && !fixedError && fixedData?.features.length === 0 && <p role="status">No hay códigos fijos con estos filtros.</p>}{fixedNombre && fixedNombreInput.trim() === fixedNombre && !fixedLoading && !fixedError && fixedData && fixedData.features.length > 0 && <section className="mt-3" aria-label="Resultados por nombre"><p className="mb-2 text-xs text-slate-600" role="status">{fixedData.features.length} códigos encontrados</p><ul className="max-h-80 space-y-2 overflow-y-auto p-1">{fixedData.features.map(feature => { const state = fixedStates.find(item => item.value === Number(feature.properties.Estado)); const code = feature.properties.CodFijo ?? feature.properties.CodF_SIG ?? feature.properties.CodF_SQL ?? feature.id; const isSelected = selected?.layer.id === "CodigosFijos" && selected.feature.id === feature.id; return <li key={feature.id}><button type="button" className={`w-full rounded-md border p-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${isSelected ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`} aria-pressed={isSelected} onClick={() => { setSelected({ layer, feature }); setTarget({ ...feature, layer: "CodigosFijos" }); }}><span className="block break-words font-semibold text-slate-900">{String(feature.properties.Nombre ?? "Sin nombre")}</span><span className="mt-1 block break-words text-xs text-slate-600">Código: {String(code)}</span><span className="mt-1 flex items-center gap-2 text-xs text-slate-700"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: fixedStateColor(feature.properties.Estado) }} aria-hidden="true" />{state?.label ?? "Estado desconocido"}</span>{!feature.geometry && <span className="mt-1 block text-xs text-slate-500">Sin ubicación disponible</span>}</button></li>; })}</ul></section>}</div>}</div>)}<div className="map-legend"><h3>Leyenda</h3>{activeLayers.flatMap(layer => layer.id === "CodigosFijos" ? fixedStates.map(state => <div key={`state-${state.value}`}><i style={{ background: state.color }} />{state.label}</div>).concat([{ label: "Estado desconocido", color: "#64748b", value: 0 }].map(state => <div key="state-unknown"><i style={{ background: state.color }} />{state.label}</div>)) : [<div key={layer.id}><i style={{ background: colors[layer.id] }} />{layer.label}</div>])}</div></aside></div>
+      <aside className="map-sidebar" aria-label="Controles del mapa">
+        <div role="tablist" aria-label="Secciones del panel" className="mb-4 grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1">
+          {sidebarTabs.map((tab, index) => <button key={tab.id} id={`map-tab-${tab.id}`} type="button" role="tab" aria-selected={sidebarTab === tab.id} aria-controls={`map-panel-${tab.id}`} tabIndex={sidebarTab === tab.id ? 0 : -1} className={`min-h-11 rounded-md px-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${sidebarTab === tab.id ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:bg-slate-200"}`} onClick={() => setSidebarTab(tab.id)} onKeyDown={event => {
+            let next = index;
+            if (event.key === "ArrowRight") next = (index + 1) % sidebarTabs.length;
+            else if (event.key === "ArrowLeft") next = (index + sidebarTabs.length - 1) % sidebarTabs.length;
+            else if (event.key === "Home") next = 0;
+            else if (event.key === "End") next = sidebarTabs.length - 1;
+            else return;
+            event.preventDefault();
+            setSidebarTab(sidebarTabs[next].id);
+            document.getElementById(`map-tab-${sidebarTabs[next].id}`)?.focus();
+          }}>{tab.label}</button>)}
+        </div>
+        <div id="map-panel-search" role="tabpanel" aria-labelledby="map-tab-search" hidden={sidebarTab !== "search"}>
+        <section className="map-sidebar-section map-search-section" aria-labelledby="map-search-heading">
+          <h2 id="map-search-heading">Buscar código fijo</h2>
+          <p className="map-muted">Buscá por nombre del propietario y filtrá por estado.</p>
+          <label htmlFor="fixed-owner">Nombre del propietario</label>
+          <input id="fixed-owner" className="map-fixed-owner" type="search" value={fixedNombreInput} onChange={event => setFixedNombreInput(event.target.value)} placeholder="Buscar nombre…" />
+          <label htmlFor="fixed-state">Estado</label>
+          <select id="fixed-state" className="map-basemap-select" value={fixedEstado} onChange={event => setFixedEstado(event.target.value)}><option value="">Todos los estados</option>{fixedStates.map(state => <option key={state.value} value={state.value}>{state.label}</option>)}</select>
+          {(fixedNombreInput || fixedEstado) && <button className="map-clear-filters" type="button" onClick={clearFixedFilters}>Limpiar filtros</button>}
+        </section>
+        <section className="map-sidebar-section map-results-section" aria-labelledby="map-results-heading">
+          <h2 id="map-results-heading">Resultados</h2>
+          <p className="map-muted">Seleccioná un resultado para ubicarlo en el mapa.</p>
+          {!visible.has("CodigosFijos") ? <p className="map-muted" role="status">La capa Códigos fijos está oculta. Activala en la pestaña Capas para buscar y ver resultados.</p> : fixedNombreInput.trim() !== fixedNombre ? <p className="map-muted" role="status">Escribí un nombre para buscar, o filtrá por estado.</p> : fixedLoading ? <p role="status">Cargando códigos fijos…</p> : fixedError ? <p className="map-filter-error" role="alert">{fixedError}</p> : fixedData?.features.length === 0 ? <p className="map-muted" role="status">No hay códigos fijos con estos filtros.</p> : fixedData && (fixedNombre || fixedEstado) ? <>
+            <p className="map-result-count" role="status">{fixedData.features.length} códigos encontrados</p>
+            <ul className="map-result-list" aria-label="Resultados de códigos fijos">{fixedData.features.map(feature => {
+              const state = fixedStates.find(item => item.value === Number(feature.properties.Estado));
+              const code = feature.properties.CodFijo ?? feature.properties.CodF_SIG ?? feature.properties.CodF_SQL ?? feature.id;
+              const isSelected = selected?.layer.id === "CodigosFijos" && selected.feature.id === feature.id;
+              return <li key={feature.id}><button type="button" className={`map-result-button ${isSelected ? "is-selected" : ""}`} aria-label={`Ubicar ${String(feature.properties.Nombre ?? "Sin nombre")}, código ${String(code)}, estado ${state?.label ?? "Estado desconocido"}`} aria-pressed={isSelected} onClick={() => {
+                const fixedLayer = layers.find(candidate => candidate.id === "CodigosFijos");
+                if (!fixedLayer) { setFixedError("No se encontró la capa de códigos fijos."); return; }
+                setSelected({ layer: fixedLayer, feature }); setTarget({ ...feature, layer: "CodigosFijos" });
+              }}>
+                <span className="map-result-name">{String(feature.properties.Nombre ?? "Sin nombre")}</span>
+                <span className="map-result-code">Código: {String(code)}</span>
+                <span className="map-result-state"><i style={{ backgroundColor: fixedStateColor(feature.properties.Estado) }} aria-hidden="true" />{state?.label ?? "Estado desconocido"}</span>
+                {!feature.geometry && <span className="map-result-code">Sin ubicación disponible</span>}
+              </button></li>;
+            })}</ul>
+          </> : <p className="map-muted">Los resultados aparecerán cuando apliques un filtro.</p>}
+        </section>
+        </div>
+        <div id="map-panel-layers" role="tabpanel" aria-labelledby="map-tab-layers" hidden={sidebarTab !== "layers"}>
+        <section className="map-sidebar-section" aria-labelledby="map-basemap-heading">
+          <h2 id="map-basemap-heading">Mapa base</h2>
+          <label className="map-basemap-label" htmlFor="map-basemap">Estilo de fondo</label>
+          <select id="map-basemap" className="map-basemap-select" value={basemapId} onChange={event => setBasemapId(event.target.value as BasemapId)}>{Object.entries(basemaps).map(([id, basemap]) => <option key={id} value={id}>{basemap.label}</option>)}</select>
+        </section>
+        <section className="map-sidebar-section" aria-labelledby="map-layers-heading">
+          <h2 id="map-layers-heading">Capas visibles</h2><p className="map-muted">Activá o desactivá información del mapa.</p>
+          {loading ? <p role="status">Cargando capas…</p> : orderedLayers.map(layer => <div key={layer.id}>
+            <div className="map-layer-row"><label><input type="checkbox" checked={visible.has(layer.id)} onChange={event => setLayerVisible(layer.id, event.target.checked)} /><span className="map-swatch" style={{ backgroundColor: colors[layer.id] }} /><span>{layer.label}</span></label><button type="button" title={`Acercar a ${layer.label}`} onClick={() => void fitLayer(layer.id)} aria-label={`Acercar a ${layer.label}`}>⌖</button></div>
+            {layer.id === "CodigosFijos" && !visible.has(layer.id) && <p className="map-muted map-layer-help">Activá esta capa para buscar códigos fijos y ver sus resultados.</p>}
+          </div>)}
+        </section>
+        </div>
+        <div id="map-panel-legend" role="tabpanel" aria-labelledby="map-tab-legend" hidden={sidebarTab !== "legend"}>
+        <section className="map-legend map-sidebar-section" aria-labelledby="map-legend-heading"><h2 id="map-legend-heading">Leyenda de colores</h2>
+          {activeLayers.length === 0 && <p className="map-muted">Activá una capa en la pestaña Capas para ver sus colores.</p>}
+          {activeLayers.flatMap(layer => layer.id === "CodigosFijos" ? fixedStates.map(state => <div key={`state-${state.value}`}><i style={{ background: state.color }} />{state.label}</div>).concat([{ label: "Estado desconocido", color: "#64748b", value: 0 }].map(state => <div key="state-unknown"><i style={{ background: state.color }} />{state.label}</div>)) : [<div key={layer.id}><i style={{ background: colors[layer.id] }} />{layer.label}</div>])}
+        </section>
+        </div>
+      </aside></div>
   </main></AuthenticatedLayout>;
 }
