@@ -32,9 +32,19 @@
 .map-workspace-actions { display:grid; gap:7px; margin-top:16px; padding-bottom:14px; border-bottom:1px solid #e2e8f0; }
 .map-workspace-actions button { display:flex; align-items:center; justify-content:flex-start; gap:8px; min-height:38px; border:1px solid #cbd5e1; border-radius:7px; padding:0 10px; color:#334155; background:#fff; font:inherit; font-size:12px; cursor:pointer; }
 .map-workspace-actions button:hover { background:#f8fafc; border-color:#94a3b8; }
-.map-workspace-actions button:focus-visible,.map-center-control button:focus-visible { outline:3px solid #bfdbfe; outline-offset:2px; }
-.map-center-control button { display:grid; width:30px; height:30px; place-items:center; border:0; background:#fff; color:#334155; cursor:pointer; }
-.map-canvas-exporting .leaflet-control-zoom,.map-canvas-exporting .map-center-control { display:none !important; }
+.map-workspace-actions button:focus-visible { outline:3px solid #bfdbfe; outline-offset:2px; }
+.map-toolbar-control button { position:relative; display:grid; width:30px; height:30px; place-items:center; border:0; background:#fff; color:#334155; cursor:pointer; }
+.map-toolbar-control button:focus-visible { z-index:2; outline:3px solid #bfdbfe; outline-offset:2px; }
+.map-toolbar-control button:disabled { color:#94a3b8; cursor:not-allowed; }
+.map-toolbar-control button[data-tooltip]::after { position:absolute; z-index:2000; top:50%; left:calc(100% + 8px); width:max-content; max-width:220px; transform:translateY(-50%); border-radius:5px; padding:6px 8px; color:#fff; background:#0f172a; content:attr(data-tooltip); font:500 12px/1.3 system-ui,sans-serif; opacity:0; pointer-events:none; visibility:hidden; transition:opacity .12s ease .1s,visibility 0s linear .22s; }
+.map-toolbar-control button:not(:disabled)[data-tooltip]:hover::after,.map-toolbar-control button:focus-visible[data-tooltip]::after { opacity:1; visibility:visible; transition-delay:.1s; }
+.map-toolbar-control button:disabled[data-tooltip]::after { display:none; }
+.map-canvas-exporting .map-toolbar-control { display:none !important; }
+.map-toolbar-control button svg { display:block; }
+/* Compact credits while leaving enough bottom room for html2canvas text baselines. */
+.leaflet-control-attribution { padding:2px 5px; font-size:10px; line-height:14px; }
+.leaflet-control-attribution svg { vertical-align:middle; }
+.map-canvas-exporting .leaflet-control-attribution { margin-right:8px; margin-bottom:8px; padding:2px 5px 6px; line-height:14px; background:#fff; }
 .map-workspace:fullscreen { display:grid; grid-template-columns:minmax(0,1fr) 260px; width:100vw; height:100vh; min-height:0; border:0; border-radius:0; }
 .map-workspace:fullscreen .map-canvas { height:100%; min-height:0; }
 .map-workspace:fullscreen .leaflet-map { height:100%; min-height:0; }

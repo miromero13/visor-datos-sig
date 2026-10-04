@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import L from "leaflet";
 import { createRoot } from "react-dom/client";
 import html2canvas from "html2canvas";
-import { Crosshair, Download, Maximize, Minimize, Printer } from "lucide-react";
+import { Camera, Crosshair, Maximize, Printer, Plus, Minus } from "lucide-react";
 import { AuthenticatedLayout } from "@/layouts/AuthenticatedLayout";
 import { getLayerExtent, getLayerFeatures, getLayers, searchLayer, type Extent, type Feature, type FeatureCollection, type Layer, type LayerId, type SearchResult } from "@/lib/layers";
 import "leaflet/dist/leaflet.css";
@@ -28,37 +28,60 @@ const allowedLayerIds = new Set<LayerId>(["CodigosFijos", "Lotes", "Manzanas", "
 const layerMenuOrder: LayerId[] = ["Vias", "Manzanas", "Lotes", "CodigosFijos"];
 const layerRenderOrder: LayerId[] = ["Vias", "Manzanas", "Lotes", "CodigosFijos"];
 const initialMapCenter: L.LatLngExpression = [-16.39, -60.97];
-function CenterMapControl({ extent }: { extent: Extent | null }) {
+function MapToolbarControl({ extent, fullscreen, toggleFullscreen, printMap, exportPng }: { extent: Extent | null; fullscreen: boolean; toggleFullscreen: () => void; printMap: () => void; exportPng: () => void }) {
   const map = useMap();
+  const handlers = useRef({ extent, fullscreen, toggleFullscreen, printMap, exportPng });
+  handlers.current = { extent, fullscreen, toggleFullscreen, printMap, exportPng };
   useEffect(() => {
     const control = new L.Control({ position: "topleft" });
-    let root: ReturnType<typeof createRoot> | undefined;
-    control.onAdd = () => {
-      const container = L.DomUtil.create("div", "leaflet-bar map-center-control");
-      const button = L.DomUtil.create("button", "", container);
-      button.type = "button";
-      button.title = "Centrar mapa";
-      button.setAttribute("aria-label", "Centrar mapa");
-      L.DomEvent.disableClickPropagation(container);
-      L.DomEvent.on(button, "click", () => {
-        const bounds = L.latLngBounds([]);
-        map.eachLayer(layer => {
-          if (layer instanceof L.GeoJSON) {
-            const layerBounds = layer.getBounds();
-            if (layerBounds.isValid()) bounds.extend(layerBounds);
-          }
-        });
-        if (bounds.isValid()) map.fitBounds(bounds, { padding: [28, 28], maxZoom: MAX_MAP_ZOOM });
-        else if (extent) map.fitBounds([[extent.south, extent.west], [extent.north, extent.east]], { padding: [28, 28], maxZoom: MAX_MAP_ZOOM });
-        else map.setView(initialMapCenter, Math.min(map.getZoom(), MAX_MAP_ZOOM));
+    const roots: ReturnType<typeof createRoot>[] = [];
+    const buttons: HTMLButtonElement[] = [];
+    const icons = [<Plus size={18} aria-hidden="true" />, <Minus size={18} aria-hidden="true" />, <Crosshair size={18} aria-hidden="true" />, <Maximize size={17} aria-hidden="true" />, <Printer size={17} aria-hidden="true" />, <Camera size={17} aria-hidden="true" />];
+    const labels = ["Acercar mapa", "Alejar mapa", "Centrar mapa", "Pantalla completa", "Imprimir vista actual", "Exportar vista actual como PNG"];
+    const refresh = () => {
+      buttons.forEach((button, index) => {
+        const label = index === 3 && handlers.current.fullscreen ? "Salir de pantalla completa" : labels[index];
+        button.setAttribute("aria-label", label);
+        button.setAttribute("data-tooltip", label);
+        button.disabled = index < 2 && (index === 0 ? map.getZoom() >= map.getMaxZoom() : map.getZoom() <= map.getMinZoom());
       });
-      root = createRoot(button);
-      root.render(<Crosshair size={18} aria-hidden="true" />);
-      return container;
+    };
+    control.onAdd = () => {
+      const root = L.DomUtil.create("div", "leaflet-bar map-toolbar-control");
+      const actions = [
+        () => map.zoomIn(),
+        () => map.zoomOut(),
+        () => {
+          const bounds = L.latLngBounds([]);
+          map.eachLayer(layer => { if (layer instanceof L.GeoJSON) { const layerBounds = layer.getBounds(); if (layerBounds.isValid()) bounds.extend(layerBounds); } });
+          const currentExtent = handlers.current.extent;
+          if (bounds.isValid()) map.fitBounds(bounds, { padding: [28, 28], maxZoom: MAX_MAP_ZOOM });
+          else if (currentExtent) map.fitBounds([[currentExtent.south, currentExtent.west], [currentExtent.north, currentExtent.east]], { padding: [28, 28], maxZoom: MAX_MAP_ZOOM });
+          else map.setView(initialMapCenter, Math.min(map.getZoom(), MAX_MAP_ZOOM));
+        },
+        () => handlers.current.toggleFullscreen(),
+        () => handlers.current.printMap(),
+        () => handlers.current.exportPng(),
+      ];
+      buttons.length = 0;
+      actions.forEach((action, index) => {
+        const button = L.DomUtil.create("button", "", root);
+        button.type = "button";
+        buttons.push(button);
+        const reactRoot = createRoot(button);
+        roots.push(reactRoot);
+        reactRoot.render(icons[index]);
+        L.DomEvent.on(button, "click", event => { L.DomEvent.stopPropagation(event); action(); });
+      });
+      refresh();
+      L.DomEvent.disableClickPropagation(root);
+      L.DomEvent.disableScrollPropagation(root);
+      return root;
     };
     control.addTo(map);
-    return () => { root?.unmount(); control.remove(); };
-  }, [map, extent]);
+    map.on("zoomend", refresh);
+    return () => { map.off("zoomend", refresh); roots.forEach(root => root.unmount()); control.remove(); };
+  }, [map]);
   return null;
 }
 function MapClickHandler({ onEmptyClick }: { onEmptyClick: () => void }) {
@@ -197,7 +220,7 @@ export function MapPage() {
     if (!mapCanvas) throw new Error("No se encontró el mapa para capturar.");
     mapCanvas.classList.add("map-canvas-exporting");
     try {
-      return await html2canvas(mapCanvas, { useCORS: true, allowTaint: false, scale: window.devicePixelRatio || 1, backgroundColor: "#ffffff" });
+      return await html2canvas(mapCanvas, { useCORS: true, allowTaint: false, scale: window.devicePixelRatio || 1, backgroundColor: "#ffffff", ignoreElements: element => element.classList.contains("map-toolbar-control") });
     } finally {
       mapCanvas.classList.remove("map-canvas-exporting");
     }
@@ -238,7 +261,7 @@ export function MapPage() {
     {error && <div className="map-alert" role="alert">{error}</div>}
     {exportError && <div className="map-alert" role="alert">{exportError}</div>}
     {printImage && <div className="map-print-overlay"><img src={printImage} alt="Vista actual del mapa" /></div>}
-    <div className="map-workspace" ref={workspaceRef}><section className="map-canvas" ref={mapCanvasRef} aria-label="Mapa interactivo"><MapContainer center={initialMapCenter} zoom={12} maxZoom={MAX_MAP_ZOOM} scrollWheelZoom preferCanvas className="leaflet-map"><MapClickHandler onEmptyClick={clearSelection} /><CenterMapControl extent={extent} /><MapSizeSynchronizer extent={extent} target={target} collections={visibleCollections} /><LoadedDataFit collections={visibleCollections} target={target} />{basemaps[basemapId].url && <TileLayer key={basemapId} attribution={basemaps[basemapId].attribution} url={basemaps[basemapId].url} crossOrigin="anonymous" />}<MapView target={target} />{activeLayers.map(layer => data[layer.id] && <ZoomStyledGeoJSON key={layer.id} layer={layer} data={data[layer.id] as GeoJSON.FeatureCollection} onSelect={feature => selectMap(feature, layer)} />)}</MapContainer>{!loading && activeLayers.length > 0 && activeLayers.every(layer => data[layer.id]?.features.length === 0) && <div className="map-empty">No hay elementos geográficos para mostrar.</div>}{selected && <aside className="map-feature-card" aria-label="Atributos del elemento seleccionado"><div className="map-feature-card-heading"><div><h2>Detalle</h2><p className="map-detail-layer">{selected.layer.label}</p></div><button type="button" className="map-feature-card-close" aria-label="Cerrar detalle del elemento" onClick={() => { setSelected(null); setTarget(null); }}>×</button></div><dl>{Object.entries(selected.feature.properties).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value == null ? "—" : String(value)}</dd></div>)}</dl></aside>}</section>
-      <aside className="map-sidebar" aria-label="Capas del mapa"><h2>Capas</h2><p className="map-muted">Activá o desactivá la información</p><label className="map-basemap-label" htmlFor="map-basemap">Mapa base</label><select id="map-basemap" className="map-basemap-select" value={basemapId} onChange={event => setBasemapId(event.target.value as BasemapId)}>{Object.entries(basemaps).map(([id, basemap]) => <option key={id} value={id}>{basemap.label}</option>)}</select><div className="map-workspace-actions"><button type="button" onClick={() => void toggleFullscreen()} title={fullscreen ? "Salir de pantalla completa" : "Pantalla completa"} aria-label={fullscreen ? "Salir de pantalla completa" : "Pantalla completa"}>{fullscreen ? <Minimize size={17} /> : <Maximize size={17} />}<span>{fullscreen ? "Salir" : "Pantalla completa"}</span></button><button type="button" onClick={() => void printMap()} title="Imprimir vista actual"><Printer size={17} /><span>Imprimir</span></button><button type="button" onClick={() => void exportPng()} title="Exportar vista actual como PNG"><Download size={17} /><span>Exportar PNG</span></button></div>{loading ? <p role="status">Cargando capas…</p> : orderedLayers.map(layer => <div className="map-layer-row" key={layer.id}><label><input type="checkbox" checked={visible.has(layer.id)} onChange={event => setLayerVisible(layer.id, event.target.checked)} /><span className="map-swatch" style={{ backgroundColor: colors[layer.id] }} /><span>{layer.label}</span></label><button type="button" title={`Acercar a ${layer.label}`} onClick={() => void fitLayer(layer.id)} aria-label={`Acercar a ${layer.label}`}>⌖</button></div>)}<div className="map-legend"><h3>Leyenda</h3>{activeLayers.map(layer => <div key={layer.id}><i style={{ background: colors[layer.id] }} />{layer.label}</div>)}</div></aside></div>
+    <div className="map-workspace" ref={workspaceRef}><section className="map-canvas" ref={mapCanvasRef} aria-label="Mapa interactivo"><MapContainer center={initialMapCenter} zoom={12} maxZoom={MAX_MAP_ZOOM} zoomControl={false} scrollWheelZoom preferCanvas className="leaflet-map"><MapClickHandler onEmptyClick={clearSelection} /><MapToolbarControl extent={extent} fullscreen={fullscreen} toggleFullscreen={() => void toggleFullscreen()} printMap={() => void printMap()} exportPng={() => void exportPng()} /><MapSizeSynchronizer extent={extent} target={target} collections={visibleCollections} /><LoadedDataFit collections={visibleCollections} target={target} />{basemaps[basemapId].url && <TileLayer key={basemapId} attribution={basemaps[basemapId].attribution} url={basemaps[basemapId].url} crossOrigin="anonymous" />}<MapView target={target} />{activeLayers.map(layer => data[layer.id] && <ZoomStyledGeoJSON key={layer.id} layer={layer} data={data[layer.id] as GeoJSON.FeatureCollection} onSelect={feature => selectMap(feature, layer)} />)}</MapContainer>{!loading && activeLayers.length > 0 && activeLayers.every(layer => data[layer.id]?.features.length === 0) && <div className="map-empty">No hay elementos geográficos para mostrar.</div>}{selected && <aside className="map-feature-card" aria-label="Atributos del elemento seleccionado"><div className="map-feature-card-heading"><div><h2>Detalle</h2><p className="map-detail-layer">{selected.layer.label}</p></div><button type="button" className="map-feature-card-close" aria-label="Cerrar detalle del elemento" onClick={() => { setSelected(null); setTarget(null); }}>×</button></div><dl>{Object.entries(selected.feature.properties).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value == null ? "—" : String(value)}</dd></div>)}</dl></aside>}</section>
+      <aside className="map-sidebar" aria-label="Capas del mapa"><h2>Capas</h2><p className="map-muted">Activá o desactivá la información</p><label className="map-basemap-label" htmlFor="map-basemap">Mapa base</label><select id="map-basemap" className="map-basemap-select" value={basemapId} onChange={event => setBasemapId(event.target.value as BasemapId)}>{Object.entries(basemaps).map(([id, basemap]) => <option key={id} value={id}>{basemap.label}</option>)}</select>{loading ? <p role="status">Cargando capas…</p> : orderedLayers.map(layer => <div className="map-layer-row" key={layer.id}><label><input type="checkbox" checked={visible.has(layer.id)} onChange={event => setLayerVisible(layer.id, event.target.checked)} /><span className="map-swatch" style={{ backgroundColor: colors[layer.id] }} /><span>{layer.label}</span></label><button type="button" title={`Acercar a ${layer.label}`} onClick={() => void fitLayer(layer.id)} aria-label={`Acercar a ${layer.label}`}>⌖</button></div>)}<div className="map-legend"><h3>Leyenda</h3>{activeLayers.map(layer => <div key={layer.id}><i style={{ background: colors[layer.id] }} />{layer.label}</div>)}</div></aside></div>
   </main></AuthenticatedLayout>;
 }
