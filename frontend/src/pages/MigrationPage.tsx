@@ -4,7 +4,7 @@ import { CheckCircle2, ChevronDown, FileCheck2, FolderOpen, Play, X } from "luci
 import { useAuth } from "@/components/AuthProvider";
 import { AuthenticatedLayout } from "@/layouts/AuthenticatedLayout";
 import { Button } from "@/components/ui/button";
-import { executeMigration, validateMigration, type MigrationExecution, type MigrationMode, type MigrationValidation } from "@/lib/migrations";
+import { executeMigration, simulateFixedCodeStates, validateMigration, type FixedCodeSimulationResult, type MigrationExecution, type MigrationMode, type MigrationValidation } from "@/lib/migrations";
 
 const approvedLayers = ["Exp_CodigoFijo_4326", "Exp_MapaBase_LOTES_4326", "Exp_MapaBase_MZA_4326", "Exp_MapaBase_VIAS_4326"] as const;
 const components = [".shp", ".shx", ".dbf", ".prj"] as const;
@@ -14,13 +14,17 @@ export function MigrationPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [validation, setValidation] = useState<MigrationValidation | null>(null);
   const [result, setResult] = useState<MigrationExecution | null>(null);
+  const [simulationResult, setSimulationResult] = useState<FixedCodeSimulationResult | null>(null);
   const [mode, setMode] = useState<MigrationMode>("replace");
-  const [busy, setBusy] = useState<"validate" | "execute" | null>(null);
+  const [busy, setBusy] = useState<"validate" | "execute" | "simulate" | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const controller = useRef<AbortController | null>(null);
+  const simulationDialog = useRef<HTMLDialogElement>(null);
+  const simulationInFlight = useRef(false);
 
   function selectFiles(selected: File[]) {
+    if (busy !== null) return;
     controller.current?.abort();
     setFiles(selected);
     setValidation(null);
@@ -30,6 +34,7 @@ export function MigrationPage() {
   }
 
   async function validate() {
+    if (busy !== null) return;
     if (!files.length) {
       setError("Seleccioná los archivos de las capas que querés migrar.");
       return;
@@ -58,7 +63,7 @@ export function MigrationPage() {
   }
 
   async function execute() {
-    if (!validation?.valid) return;
+    if (busy !== null || !validation?.valid) return;
     controller.current?.abort();
     const abort = new AbortController();
     controller.current = abort;
@@ -76,6 +81,36 @@ export function MigrationPage() {
         controller.current = null;
         setBusy(null);
       }
+    }
+  }
+
+  function openSimulationDialog() {
+    if (busy !== null || simulationInFlight.current) return;
+    simulationDialog.current?.showModal();
+  }
+
+  async function simulateStates() {
+    if (busy !== null || simulationInFlight.current) return;
+    simulationInFlight.current = true;
+    simulationDialog.current?.close();
+    controller.current?.abort();
+    const abort = new AbortController();
+    controller.current = abort;
+    setBusy("simulate");
+    setError("");
+    setNotice("");
+    setSimulationResult(null);
+    try {
+      setSimulationResult(await simulateFixedCodeStates(abort.signal));
+    } catch (cause) {
+      if (abort.signal.aborted) setNotice("La solicitud se interrumpió. El resultado es incierto; verificá los datos antes de volver a ejecutar.");
+      else setError(cause instanceof Error ? cause.message : "No se pudo confirmar el resultado. Verificá los datos antes de volver a ejecutar.");
+    } finally {
+      if (controller.current === abort) {
+        controller.current = null;
+        setBusy(null);
+      }
+      simulationInFlight.current = false;
     }
   }
 
@@ -109,10 +144,10 @@ export function MigrationPage() {
               <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-slate-800 bg-slate-800 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:border-slate-900 hover:bg-slate-900 focus-within:ring-2 focus-within:ring-slate-500 focus-within:ring-offset-2">
                 <FolderOpen size={17} aria-hidden="true" />
                 Seleccionar componentes
-                <input className="sr-only" type="file" multiple accept=".shp,.shx,.dbf,.prj" aria-label="Seleccionar componentes de capas aprobadas" onChange={(event) => selectFiles(Array.from(event.currentTarget.files ?? []))} />
+                <input className="sr-only" type="file" multiple accept=".shp,.shx,.dbf,.prj" aria-label="Seleccionar componentes de capas aprobadas" disabled={busy !== null} onChange={(event) => selectFiles(Array.from(event.currentTarget.files ?? []))} />
               </label>
               {files.length > 0 && (
-                <Button type="button" variant="outline" className="border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50" onClick={() => selectFiles([])}>
+                <Button type="button" variant="outline" className="border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50" onClick={() => selectFiles([])} disabled={busy !== null}>
                   Limpiar
                 </Button>
               )}
@@ -129,6 +164,34 @@ export function MigrationPage() {
                 ))}
               </ul>
             )}
+          </section>
+
+          <section className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-5 sm:p-7" aria-labelledby="simulation-heading">
+            <h2 id="simulation-heading" className="text-lg font-semibold text-slate-900">Simulación de estados (solo demostración)</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-700">Genera estados simulados para todos los códigos fijos ya guardados, independientemente de los archivos seleccionados o validados. Sobrescribe irreversiblemente TODOS los estados existentes; no hay deshacer. No modifica archivos SHP.</p>
+            <Button type="button" size="lg" className="mt-4 border border-amber-800 bg-amber-700 px-5 font-semibold text-white shadow-sm hover:border-amber-900 hover:bg-amber-800" onClick={openSimulationDialog} disabled={busy !== null}>
+              {busy === "simulate" ? "Simulando…" : "Simular 5 estados de código fijo"}
+            </Button>
+            <dialog ref={simulationDialog} aria-labelledby="simulation-dialog-title" aria-describedby="simulation-dialog-description" className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-xl border border-slate-200 bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-slate-950/60">
+              <div className="p-6">
+                <h3 id="simulation-dialog-title" className="text-lg font-semibold">Confirmar simulación</h3>
+                <p id="simulation-dialog-description" className="mt-3 text-sm leading-6 text-slate-700">Esta acción sobrescribirá los estados de TODOS los códigos fijos existentes. No hay deshacer.</p>
+                <div className="mt-6 flex justify-end gap-3">
+                  <Button type="button" variant="outline" autoFocus className="border-slate-300 bg-white text-slate-700" onClick={() => simulationDialog.current?.close()}>Cancelar</Button>
+                  <Button type="button" className="border border-red-800 bg-red-700 font-semibold text-white hover:border-red-900 hover:bg-red-800" disabled={busy !== null} onClick={() => void simulateStates()}>Confirmar simulación</Button>
+                </div>
+              </div>
+            </dialog>
+            {busy === "simulate" && <p role="status" className="mt-3 text-sm text-slate-700">Actualizando de forma transaccional todos los estados guardados…</p>}
+            {busy === "simulate" && <Button type="button" variant="outline" className="ml-3 border-slate-300 bg-white text-slate-700" onClick={cancel}>Cancelar solicitud</Button>}
+            {simulationResult && (simulationResult.total === 0
+              ? <p role="status" className="mt-4 rounded-lg border border-slate-300 bg-white p-4 text-sm text-slate-800">No hay códigos fijos guardados; no se actualizaron registros.</p>
+              : <div role="status" className="mt-4 rounded-lg border border-amber-300 bg-white p-4 text-sm text-slate-900" aria-live="polite">
+                  <h3 className="font-semibold">Simulación persistida: {simulationResult.total.toLocaleString("es-AR")} códigos fijos</h3>
+                  <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+                    {[{ state: 1, label: "Normal", color: "text-green-700" }, { state: 3, label: "Cortado", color: "text-amber-700" }, { state: 2, label: "Para corte", color: "text-orange-700" }, { state: 4, label: "Baja parcial", color: "text-red-600" }, { state: 5, label: "Baja total", color: "text-red-900" }].map(({ state, label, color }) => <li key={state} className={color}>{label}: {(simulationResult.counts[String(state)] ?? 0).toLocaleString("es-AR")}</li>)}
+                  </ul>
+                </div>)}
           </section>
 
           <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 sm:p-7" aria-labelledby="validation-heading">

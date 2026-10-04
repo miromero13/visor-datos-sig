@@ -13,6 +13,11 @@ export interface MigrationValidation {
   layers: MigrationLayerPreview[];
   errors: string[];
 }
+export interface FixedCodeSimulationResult {
+  total: number;
+  counts: Record<string, number>;
+  completedAt: string;
+}
 export interface MigrationExecution {
   mode: MigrationMode;
   completedAt: string;
@@ -43,6 +48,12 @@ async function readResponse<T>(response: Response): Promise<T> {
     throw new Error(detail);
   }
   return response.json() as Promise<T>;
+}
+
+export async function simulateFixedCodeStates(signal?: AbortSignal) {
+  return readResponse<FixedCodeSimulationResult>(await apiFetch("/api/migrations/codigos-fijos/simulate-states", {
+    method: "POST", body: JSON.stringify({ confirmed: true }), headers: { "Content-Type": "application/json" }, signal,
+  }));
 }
 
 export async function validateMigration(files: File[], signal?: AbortSignal) {
