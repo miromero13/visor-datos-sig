@@ -19,30 +19,48 @@ public sealed class LayerQueryService(IConfiguration configuration)
 
     public object Catalog() => new { layers = Layers.Values.Select(x => new { id = x.Name, label = x.Name switch { "CodigosFijos" => "Códigos fijos", "Lotes" => "Lotes", "Manzanas" => "Manzanas", _ => "Vías" }, geometryType = x.Name == "CodigosFijos" ? "Point" : x.Name == "Vias" ? "LineString" : "Polygon", srid = 4326 }) };
 
-    public async Task<object> GeoJsonAsync(string name, string? bbox, int? limit, CancellationToken cancellationToken)
+    public async Task<object> GeoJsonAsync(string name, string? bbox, int? limit, CancellationToken cancellationToken, int? estado = null, string? nombre = null, int? afterId = null)
     {
         var layer = Find(name);
+        if ((estado is not null || !string.IsNullOrWhiteSpace(nombre)) && layer.Name != "CodigosFijos") throw new ArgumentException("Estado and Nombre filters are only available for CodigosFijos.");
+        if (estado is not null && estado is < 1 or > 5) throw new ArgumentException("Estado must be between 1 and 5.");
+        if (afterId is not null && layer.Name != "CodigosFijos") throw new ArgumentException("Cursor pagination is only available for CodigosFijos.");
+        if (afterId is < 0) throw new ArgumentException("afterId must be nonnegative.");
         var max = Math.Clamp(limit ?? 1000, 1, MaxFeatures);
         var bounds = ParseBbox(bbox);
-        var where = bounds is null ? "" : " WHERE Geom.STIntersects(geometry::STGeomFromText(@bbox,4326))=1";
-        var sql = $"SELECT TOP (@limit) {string.Join(",", layer.Attributes.Select(x => $"[{x}]"))}, Geom.STAsText() AS Wkt FROM dbo.[{layer.Table}]{where} AND Geom IS NOT NULL";
-        if (bounds is null) sql = $"SELECT TOP (@limit) {string.Join(",", layer.Attributes.Select(x => $"[{x}]"))}, Geom.STAsText() AS Wkt FROM dbo.[{layer.Table}] WHERE Geom IS NOT NULL";
+        var predicates = new List<string> { "Geom IS NOT NULL" };
+        if (bounds is not null) predicates.Add("Geom.STIntersects(geometry::STGeomFromText(@bbox,4326))=1");
+        if (estado is not null) predicates.Add("[Estado]=@estado");
+        if (!string.IsNullOrWhiteSpace(nombre)) predicates.Add("CHARINDEX(@nombre,[Nombre])>0");
+        if (afterId is not null) predicates.Add("[IdCodigo]>@afterId");
+        var attributes = layer.Name == "CodigosFijos" ? layer.Attributes.Append("IdCodigo").Distinct(StringComparer.OrdinalIgnoreCase).ToArray() : layer.Attributes;
+        var sql = $"SELECT TOP (@limit) {string.Join(",", attributes.Select(x => $"[{x}]"))}, Geom.STAsText() AS Wkt FROM dbo.[{layer.Table}] WHERE {string.Join(" AND ", predicates)} ORDER BY [{layer.Id}]";
         var features = new List<object>();
+        var featureIds = new List<int>();
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.Add("@limit", SqlDbType.Int).Value = max;
+        command.Parameters.Add("@limit", SqlDbType.Int).Value = afterId is null ? max : max + 1;
+        if (afterId is not null) command.Parameters.Add("@afterId", SqlDbType.Int).Value = afterId.Value;
         if (bounds is not null) command.Parameters.Add("@bbox", SqlDbType.NVarChar, 200).Value = bounds;
+        if (estado is not null) command.Parameters.Add("@estado", SqlDbType.Int).Value = estado.Value;
+        if (!string.IsNullOrWhiteSpace(nombre)) command.Parameters.Add("@nombre", SqlDbType.NVarChar, 200).Value = nombre.Trim();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var wktReader = new WKTReader();
         while (await reader.ReadAsync(cancellationToken))
         {
-            if (reader.IsDBNull(layer.Attributes.Length)) continue;
+            if (reader.IsDBNull(attributes.Length)) continue;
             var properties = new Dictionary<string, object?>();
-            for (var i = 0; i < layer.Attributes.Length; i++) properties[layer.Attributes[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i);
-            var geometry = wktReader.Read(reader.GetString(layer.Attributes.Length));
-            features.Add(new { type = "Feature", id = properties.GetValueOrDefault(layer.Id), geometry = ToGeoJson(geometry), properties });
+            for (var i = 0; i < attributes.Length; i++) properties[attributes[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+            var geometry = wktReader.Read(reader.GetString(attributes.Length));
+            var featureId = Convert.ToInt32(properties.GetValueOrDefault(layer.Id));
+            features.Add(new { type = "Feature", id = featureId, geometry = ToGeoJson(geometry), properties });
+            featureIds.Add(featureId);
         }
-        return new { type = "FeatureCollection", features, numberReturned = features.Count, limit = max, srid = 4326 };
+        if (afterId is null) return new { type = "FeatureCollection", features, numberReturned = features.Count, limit = max, srid = 4326 };
+        var hasMore = features.Count > max;
+        if (hasMore) { features.RemoveAt(features.Count - 1); featureIds.RemoveAt(featureIds.Count - 1); }
+        var nextAfterId = featureIds.Count > 0 ? featureIds[^1] : (int?)null;
+        return new { type = "FeatureCollection", features, numberReturned = features.Count, limit = max, srid = 4326, hasMore, nextAfterId };
     }
 
     public async Task<object?> DetailAsync(string name, int id, CancellationToken cancellationToken)

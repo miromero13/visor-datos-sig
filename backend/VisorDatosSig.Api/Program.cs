@@ -32,6 +32,7 @@ var sessionRegistry = new SessionRegistry(builder.Configuration);
 builder.Services.AddSingleton(sessionRegistry);
 builder.Services.AddSingleton<AuthAuditService>();
 builder.Services.AddScoped<ShapefileMigrationService>();
+builder.Services.AddScoped<CodigoFijoSimulationService>();
 builder.Services.AddScoped<LayerQueryService>();
 builder.Services.AddScoped<SearchQueryService>();
 var tokenService = new JwtTokenService(builder.Configuration, sessionRegistry);
@@ -195,6 +196,35 @@ app.MapPost("/api/migrations/execute", async ([FromForm] IFormFileCollection fil
     }
 }).DisableAntiforgery().RequireAuthorization("Administrator");
 
+app.MapPost("/api/migrations/codigos-fijos/simulate-states", async (SimulationRequest request, CodigoFijoSimulationService simulation, ClaimsPrincipal principal, AuthAuditService audit, ILogger<Program> logger, CancellationToken cancellationToken) =>
+{
+    if (!request.Confirmed) return Results.Problem(statusCode: 400, title: "Confirmation required", detail: "Confirmá explícitamente la simulación antes de continuar.");
+    var user = JwtTokenService.UserFromPrincipal(principal);
+    try
+    {
+        var result = await simulation.SimulateAsync(cancellationToken);
+        audit.Record("FixedCodeStatesSimulated", user.Id, reason: $"records:{result.Total}");
+        return Results.Ok(result);
+    }
+    catch (OperationCanceledException)
+    {
+        audit.Record("FixedCodeStatesSimulationCancelled", user.Id);
+        return Results.Problem(statusCode: 400, title: "Simulation outcome uncertain", detail: "La solicitud se interrumpió. Verificá los datos antes de volver a ejecutar; no se puede confirmar el resultado.");
+    }
+    catch (SqlException exception)
+    {
+        logger.LogError(exception, "Fixed-code state simulation failed.");
+        audit.Record("FixedCodeStatesSimulationFailed", user.Id, reason: $"sql:{exception.Number}");
+        return Results.Problem(statusCode: 502, title: "Simulation database error", detail: "La base de datos no pudo completar la simulación. Verificá los datos antes de volver a ejecutar.");
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "Fixed-code state simulation failed.");
+        audit.Record("FixedCodeStatesSimulationFailed", user.Id, reason: exception.GetType().Name);
+        return Results.Problem(statusCode: 500, title: "Simulation failed", detail: "No se pudo confirmar el resultado de la simulación. Verificá los datos antes de volver a ejecutar.");
+    }
+}).RequireAuthorization("Administrator");
+
 app.MapGet("/api/layers", (LayerQueryService layers) => Results.Ok(layers.Catalog())).RequireAuthorization();
 app.MapGet("/api/search", async (string layer, string? q, int? page, int? pageSize, string? sortBy, string? sortDirection, HttpRequest request, SearchQueryService search, ILogger<Program> logger, CancellationToken cancellationToken) =>
 {
@@ -216,9 +246,9 @@ app.MapGet("/api/search/options/via-types", async (SearchQueryService search, Ca
     try { return Results.Ok(new { data = new { values = await search.GetViaTypesAsync(cancellationToken) } }); }
     catch (SqlException) { return Results.Problem(statusCode: 503, title: "Search options unavailable", detail: "No se pudieron consultar las opciones de vías."); }
 }).RequireAuthorization();
-app.MapGet("/api/layers/{layer}/geojson", async (string layer, string? bbox, int? limit, LayerQueryService query, CancellationToken cancellationToken) =>
+app.MapGet("/api/layers/{layer}/geojson", async (string layer, string? bbox, int? limit, int? estado, string? nombre, int? afterId, LayerQueryService query, CancellationToken cancellationToken) =>
 {
-    try { return Results.Ok(await query.GeoJsonAsync(layer, bbox, limit, cancellationToken)); }
+    try { return Results.Ok(await query.GeoJsonAsync(layer, bbox, limit, cancellationToken, estado, nombre, afterId)); }
     catch (KeyNotFoundException) { return Results.Problem(statusCode: 404, title: "Layer not found"); }
     catch (ArgumentException ex) { return Results.Problem(statusCode: 400, title: "Invalid layer query", detail: ex.Message); }
     catch (SqlException) { return Results.Problem(statusCode: 503, title: "Layer data unavailable", detail: "No se pudieron consultar las capas geográficas."); }
@@ -258,4 +288,5 @@ app.Run();
 
 public sealed record LoginRequest(string Login, string Password, bool RememberMe);
 public sealed record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
+public sealed record SimulationRequest(bool Confirmed);
 public partial class Program;
