@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GeoJSON, MapContainer, Pane, TileLayer, useMap } from "react-leaflet";
 import { useSearchParams } from "react-router-dom";
 import L from "leaflet";
@@ -17,7 +17,27 @@ const fixedStates = [
   { value: 4, label: "Baja parcial", color: "#8b5cf6" },
   { value: 5, label: "Baja total", color: "#6b7280" },
 ];
-const fixedStateColor = (value: unknown) => fixedStates.find((state) => Number(value) === state.value)?.color ?? "#64748b";
+const defaultPalette: Record<string, string> = {
+  ...colors,
+  ...Object.fromEntries(fixedStates.map((state) => [`state-${state.value}`, state.color])),
+  "state-unknown": "#64748b",
+};
+const paletteStorageKey = "sig.map-colors.v1";
+const PaletteContext = createContext(defaultPalette);
+const fixedStateColor = (value: unknown, palette: Record<string, string>) =>
+  palette[fixedStates.some((state) => Number(value) === state.value) ? `state-${Number(value)}` : "state-unknown"];
+function loadPalette(): Record<string, string> {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(paletteStorageKey) ?? "null");
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return { ...defaultPalette };
+    return Object.fromEntries(Object.entries(defaultPalette).map(([key, fallback]) => {
+      const value = (saved as Record<string, unknown>)[key];
+      return [key, typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback];
+    }));
+  } catch {
+    return { ...defaultPalette };
+  }
+}
 type BasemapId = "osm" | "opentopomap" | "satellite" | "carto-light" | "carto-dark" | "no-labels" | "none";
 type Basemap = { label: string; url?: string; attribution?: string };
 const cartoBasemapKey = (import.meta.env.VITE_CARTO_BASEMAP_KEY ?? "").trim();
@@ -216,6 +236,7 @@ function MapSizeSynchronizer({ extent, target, collections }: { extent: Extent |
   return null;
 }
 function MapView({ target, targetLayer, fixedRenderer }: { target: SearchResult | null; targetLayer: LayerId | null; fixedRenderer: L.Renderer }) {
+  const palette = useContext(PaletteContext);
   const map = useMap();
   const geoJson = useRef<L.GeoJSON | null>(null);
   useZoomSizing(geoJson, 5, 10, target);
@@ -226,7 +247,7 @@ function MapView({ target, targetLayer, fixedRenderer }: { target: SearchResult 
   }, [target, map]);
   if (!target?.geometry) return null;
   const isFixedCode = targetLayer === "CodigosFijos";
-  const color = isFixedCode ? fixedStateColor(target.properties.Estado) : "#16a34a";
+  const color = isFixedCode ? fixedStateColor(target.properties.Estado, palette) : palette[targetLayer ?? target.layer] ?? "#16a34a";
   return (
     <GeoJSON
       ref={geoJson}
@@ -268,6 +289,7 @@ function useZoomSizing(geoJson: { current: L.GeoJSON | null }, weight: number, r
   }, [map, geoJson, weight, radius, content]);
 }
 function ZoomStyledGeoJSON({ layer, data, onSelect }: { layer: Layer; data: GeoJSON.FeatureCollection; onSelect: (feature: Feature) => void }) {
+  const palette = useContext(PaletteContext);
   const map = useMap();
   const geoJson = useRef<L.GeoJSON | null>(null);
   const isFixedCodes = layer.id === "CodigosFijos";
@@ -280,11 +302,11 @@ function ZoomStyledGeoJSON({ layer, data, onSelect }: { layer: Layer; data: GeoJ
       pane={isFixedCodes ? FIXED_CODES_PANE : undefined}
       style={(feature) => {
         const scale = zoomScale(map.getZoom());
-        const color = layer.id === "CodigosFijos" ? fixedStateColor(feature?.properties?.Estado) : colors[layer.id];
+        const color = layer.id === "CodigosFijos" ? fixedStateColor(feature?.properties?.Estado, palette) : palette[layer.id];
         return { color, weight: (layer.id === "Vias" ? 3 : 1.5) * scale, fillColor: color, fillOpacity: layer.id === "CodigosFijos" ? 0.85 : 0.22 };
       }}
       pointToLayer={(feature, latlng) => {
-        const color = layer.id === "CodigosFijos" ? fixedStateColor(feature.properties?.Estado) : colors[layer.id];
+        const color = layer.id === "CodigosFijos" ? fixedStateColor(feature.properties?.Estado, palette) : palette[layer.id];
         return L.circleMarker(latlng, { pane: isFixedCodes ? FIXED_CODES_PANE : "markerPane", renderer, radius: 5 * zoomScale(map.getZoom()), weight: (layer.id === "Vias" ? 3 : 1.5) * zoomScale(map.getZoom()), color, fillColor: color, fillOpacity: 0.9 });
       }}
       onEachFeature={(feature, leafletLayer) =>
@@ -298,6 +320,28 @@ function ZoomStyledGeoJSON({ layer, data, onSelect }: { layer: Layer; data: GeoJ
 }
 
 export function MapPage() {
+  const [palette, setPalette] = useState(loadPalette);
+  const [paletteStorageError, setPaletteStorageError] = useState(false);
+  const changeColor = (key: string, color: string) => {
+    const next = { ...palette, [key]: color };
+    setPalette(next);
+    try {
+      localStorage.setItem(paletteStorageKey, JSON.stringify(next));
+      setPaletteStorageError(false);
+    } catch {
+      setPaletteStorageError(true);
+    }
+  };
+  const colorPicker = (key: string, label: string) => (
+    <input
+      type="color"
+      value={palette[key]}
+      aria-label={`Color de ${label}`}
+      title={`Cambiar color de ${label}`}
+      className="h-8 w-10 shrink-0 cursor-pointer rounded border border-slate-300 bg-white p-0.5"
+      onChange={(event) => changeColor(key, event.target.value)}
+    />
+  );
   const [searchParams] = useSearchParams();
   const requestedLayer = searchParams.get("layer");
   const requestedId = searchParams.get("id");
@@ -513,6 +557,7 @@ export function MapPage() {
     setTarget(null);
   }, []);
   return (
+    <PaletteContext.Provider value={palette}>
     <AuthenticatedLayout activeItem="Visor de mapa">
       <main className="map-page">
         <div className="map-heading">
@@ -685,7 +730,7 @@ export function MapPage() {
                               <span className="map-result-name">{String(feature.properties.Nombre ?? "Sin nombre")}</span>
                               <span className="map-result-code">Código: {String(code)}</span>
                               <span className="map-result-state">
-                                <i style={{ backgroundColor: fixedStateColor(feature.properties.Estado) }} aria-hidden="true" />
+                                <i style={{ backgroundColor: fixedStateColor(feature.properties.Estado, palette) }} aria-hidden="true" />
                                 {state?.label ?? "Estado desconocido"}
                               </span>
                               {!feature.geometry && <span className="map-result-code">Sin ubicación disponible</span>}
@@ -737,27 +782,29 @@ export function MapPage() {
             <div id="map-panel-legend" role="tabpanel" aria-labelledby="map-tab-legend" hidden={sidebarTab !== "legend"}>
               <section className="map-legend map-sidebar-section" aria-labelledby="map-legend-heading">
                 <h2 id="map-legend-heading">Leyenda de colores</h2>
+                <p className="map-muted">Tocá un color para cambiarlo. Se guarda en este navegador.</p>
+                {paletteStorageError && <p role="status">El color se aplicó, pero no se pudo guardar en este navegador.</p>}
                 {activeLayers.length === 0 && <p className="map-muted">Activá una capa en la pestaña Capas para ver sus colores.</p>}
                 {activeLayers.flatMap((layer) =>
                   layer.id === "CodigosFijos"
                     ? fixedStates
                         .map((state) => (
                           <div key={`state-${state.value}`}>
-                            <i style={{ background: state.color }} />
+                            {colorPicker(`state-${state.value}`, state.label)}
                             {state.label}
                           </div>
                         ))
                         .concat(
                           [{ label: "Estado desconocido", color: "#64748b", value: 0 }].map((state) => (
                             <div key="state-unknown">
-                              <i style={{ background: state.color }} />
+                              {colorPicker("state-unknown", state.label)}
                               {state.label}
                             </div>
                           )),
                         )
                     : [
                         <div key={layer.id}>
-                          <i style={{ background: colors[layer.id] }} />
+                          {colorPicker(layer.id, layer.label)}
                           {layer.label}
                         </div>,
                       ],
@@ -768,5 +815,6 @@ export function MapPage() {
         </div>
       </main>
     </AuthenticatedLayout>
+    </PaletteContext.Provider>
   );
 }
