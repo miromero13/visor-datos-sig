@@ -2,6 +2,7 @@ import { apiFetch } from "./auth";
 
 export type LayerId = "CodigosFijos" | "Lotes" | "Manzanas" | "Vias";
 export interface Feature { type: "Feature"; id: number; geometry: GeoJSON.Geometry | null; properties: Record<string, unknown> }
+export type LayerDetail = Feature;
 export interface FeatureCollection { type: "FeatureCollection"; features: Feature[]; numberReturned: number; limit: number; srid: 4326; hasMore?: boolean; nextAfterId?: number | null }
 export interface Layer { id: LayerId; label: string; geometryType: string; srid: number }
 export interface Extent { west: number; south: number; east: number; north: number; srid: number }
@@ -60,19 +61,21 @@ export async function searchAllLayers(q: string, page: number): Promise<SearchRe
 }
 const FIXED_PAGE_SIZE = 1000;
 const MAX_FIXED_FEATURES = 250000;
-export const getLayerFeatures = (layer: LayerId, filters: { estado?: number; nombre?: string } = {}) => {
+export const getLayerFeatures = (layer: LayerId, filters: { estado?: number; nombre?: string } = {}, options: { minimal?: boolean } = {}) => {
   const params = new URLSearchParams({ limit: String(FIXED_PAGE_SIZE) });
+  if (options.minimal) params.set("minimal", "true");
   if (filters.estado !== undefined) params.set("estado", String(filters.estado));
   if (filters.nombre?.trim()) params.set("nombre", filters.nombre.trim());
   return request<FeatureCollection>(`/api/layers/${layer}/geojson?${params}`);
 };
-export async function getAllFixedCodeFeatures(filters: { estado?: number; nombre?: string }, signal: AbortSignal): Promise<FeatureCollection> {
+export async function getAllFixedCodeFeatures(filters: { estado?: number; nombre?: string }, signal: AbortSignal, options: { minimal?: boolean } = {}): Promise<FeatureCollection> {
   const features: Feature[] = [];
   const seen = new Set<number>();
   let afterId = 0;
   while (true) {
     if (signal.aborted) throw new DOMException("The operation was aborted.", "AbortError");
     const params = new URLSearchParams({ limit: String(FIXED_PAGE_SIZE), afterId: String(afterId) });
+    if (options.minimal) params.set("minimal", "true");
     if (filters.estado !== undefined) params.set("estado", String(filters.estado));
     if (filters.nombre?.trim()) params.set("nombre", filters.nombre.trim());
     const page = await request<FeatureCollection>(`/api/layers/CodigosFijos/geojson?${params}`, signal);
@@ -91,4 +94,5 @@ export async function getAllFixedCodeFeatures(filters: { estado?: number; nombre
   }
   return { type: "FeatureCollection", features, numberReturned: features.length, limit: features.length, srid: 4326 };
 };
+export const getLayerDetail = (layer: LayerId, id: number, signal?: AbortSignal) => request<LayerDetail>(`/api/layers/${layer}/${id}`, signal);
 export const getLayerExtent = (layer: LayerId) => request<Extent>(`/api/layers/${layer}/extent`);

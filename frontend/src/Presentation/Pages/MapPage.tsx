@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import html2canvas from "html2canvas";
 import { Camera, Crosshair, Maximize, Printer, Plus, Minus, ChevronDown, MapPin, ExternalLink, X } from "lucide-react";
 import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
-import { getLayerExtent, getLayerFeatures, getAllFixedCodeFeatures, getLayers, searchLayer, type Extent, type Feature, type FeatureCollection, type Layer, type LayerId, type SearchResult } from "@/Application/Services/layers";
+import { getLayerExtent, getLayerFeatures, getAllFixedCodeFeatures, getLayerDetail, getLayers, searchLayer, type Extent, type Feature, type FeatureCollection, type Layer, type LayerId, type SearchResult } from "@/Application/Services/layers";
 import "leaflet/dist/leaflet.css";
 
 const colors: Record<LayerId, string> = { CodigosFijos: "#e11d48", Lotes: "#0ea5e9", Manzanas: "#7c3aed", Vias: "#f59e0b" };
@@ -227,7 +227,7 @@ function MapView({ target, targetLayer, fixedRenderer }: { target: SearchResult 
   }, [target, map]);
   if (!target?.geometry) return null;
   const isFixedCode = targetLayer === "CodigosFijos";
-  const color = isFixedCode ? fixedStateColor(target.properties.Estado, palette) : palette[targetLayer ?? target.layer] ?? "#16a34a";
+  const color = isFixedCode ? fixedStateColor(target.properties.Estado, palette) : palette[targetLayer ?? target.layer ?? "Lotes"] ?? "#16a34a";
   return (
     <GeoJSON
       ref={geoJson}
@@ -349,6 +349,10 @@ export function MapPage() {
   const [fixedLoading, setFixedLoading] = useState(false);
   const [fixedError, setFixedError] = useState("");
   const [selected, setSelected] = useState<{ layer: Layer; feature: Feature } | null>(null);
+  const [detail, setDetail] = useState<{ layerId: LayerId; featureId: number; feature: Feature } | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
+  const [detailAttempt, setDetailAttempt] = useState(0);
   const [extent, setExtent] = useState<Extent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -394,7 +398,7 @@ export function MapPage() {
     const missing = [...visible].filter((id) => id !== "CodigosFijos" && !data[id]);
     if (!missing.length) return;
     let cancelled = false;
-    Promise.all(missing.map(async (id) => [id, await getLayerFeatures(id)] as const))
+    Promise.all(missing.map(async (id) => [id, await getLayerFeatures(id, {}, { minimal: true })] as const))
       .then((results) => {
         if (!cancelled) setData((previous) => ({ ...previous, ...Object.fromEntries(results) }));
       })
@@ -420,7 +424,7 @@ export function MapPage() {
       setSelected(null);
       setTarget(null);
     }
-    getAllFixedCodeFeatures({ estado: fixedEstado ? Number(fixedEstado) : undefined, nombre: fixedNombre }, controller.signal)
+    getAllFixedCodeFeatures({ estado: fixedEstado ? Number(fixedEstado) : undefined, nombre: fixedNombre }, controller.signal, { minimal: true })
       .then((result) => {
         if (!cancelled) setFixedData(result);
       })
@@ -463,6 +467,17 @@ export function MapPage() {
       cancelled = true;
     };
   }, [selectedRouteLayer, selectedRouteId, layers]);
+  useEffect(() => {
+    if (!selected) { setDetail(null); setDetailError(""); setDetailLoading(false); return; }
+    const controller = new AbortController();
+    setDetail(null); setDetailError(""); setDetailLoading(true);
+    getLayerDetail(selected.layer.id, selected.feature.id, controller.signal)
+      .then((result) => { if (!controller.signal.aborted) setDetail({ layerId: selected.layer.id, featureId: selected.feature.id, feature: result }); })
+      .catch((e) => { if (!controller.signal.aborted) setDetailError(e instanceof Error ? e.message : "No se pudo cargar el detalle."); })
+      .finally(() => { if (!controller.signal.aborted) setDetailLoading(false); });
+    return () => controller.abort();
+  }, [selected?.layer.id, selected?.feature.id, detailAttempt]);
+  const retryDetail = () => setDetailAttempt((attempt) => attempt + 1);
   const setLayerVisible = useCallback((id: LayerId, checked: boolean) => {
     setVisible((previous) => {
       const next = new Set(previous);
@@ -610,8 +625,10 @@ export function MapPage() {
                     </button>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-2">
+                    {detailLoading && <p role="status" className="py-3 text-xs text-slate-600">Cargando detalle…</p>}
+                    {detailError && <div role="alert" className="py-3 text-xs text-red-700">{detailError} <button type="button" onClick={retryDetail} className="underline">Reintentar</button></div>}
                     <dl className="m-0">
-                      {Object.entries(selected.feature.properties).map(([key, value]) => (
+                      {Object.entries(detail?.layerId === selected.layer.id && detail.featureId === selected.feature.id ? detail.feature.properties : {}).map(([key, value]) => (
                         <div key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] items-start gap-3 py-2">
                           <dt className="text-xs leading-5 break-words text-slate-600">{key.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2")}</dt>
                           <dd className="m-0 text-right text-xs font-medium leading-5 [overflow-wrap:anywhere]">{value == null || value === "" ? "—" : String(value)}</dd>
