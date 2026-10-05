@@ -60,7 +60,7 @@ export async function searchAllLayers(q: string, page: number): Promise<SearchRe
   return { data: { items, page, pageSize: 25, total: cursor }, meta: {} };
 }
 const FIXED_PAGE_SIZE = 1000;
-const MAX_FIXED_FEATURES = 250000;
+export const MAX_FIXED_PAGE_SIZE = 5000;
 export const getLayerFeatures = (layer: LayerId, filters: { estado?: number; nombre?: string } = {}, options: { minimal?: boolean } = {}) => {
   const params = new URLSearchParams({ limit: String(FIXED_PAGE_SIZE) });
   if (options.minimal) params.set("minimal", "true");
@@ -68,30 +68,36 @@ export const getLayerFeatures = (layer: LayerId, filters: { estado?: number; nom
   if (filters.nombre?.trim()) params.set("nombre", filters.nombre.trim());
   return request<FeatureCollection>(`/api/layers/${layer}/geojson?${params}`);
 };
-export async function getAllFixedCodeFeatures(filters: { estado?: number; nombre?: string }, signal: AbortSignal, options: { minimal?: boolean } = {}): Promise<FeatureCollection> {
+export async function getAllFixedCodeFeatures(filters: { estado?: number; nombre?: string }, signal: AbortSignal, options: { minimal?: boolean; pageSize?: number; onPage?: (page: FeatureCollection, cumulativeCount: number) => void | Promise<void> } = {}): Promise<FeatureCollection> {
+  const pageSize = options.pageSize ?? FIXED_PAGE_SIZE;
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > MAX_FIXED_PAGE_SIZE) throw new RangeError(`pageSize must be an integer between 1 and ${MAX_FIXED_PAGE_SIZE}.`);
   const features: Feature[] = [];
   const seen = new Set<number>();
   let afterId = 0;
   while (true) {
     if (signal.aborted) throw new DOMException("The operation was aborted.", "AbortError");
-    const params = new URLSearchParams({ limit: String(FIXED_PAGE_SIZE), afterId: String(afterId) });
+    const params = new URLSearchParams({ limit: String(pageSize), afterId: String(afterId) });
     if (options.minimal) params.set("minimal", "true");
     if (filters.estado !== undefined) params.set("estado", String(filters.estado));
     if (filters.nombre?.trim()) params.set("nombre", filters.nombre.trim());
     const page = await request<FeatureCollection>(`/api/layers/CodigosFijos/geojson?${params}`, signal);
-    if (!page || page.type !== "FeatureCollection" || page.srid !== 4326 || !Array.isArray(page.features) || page.features.length > FIXED_PAGE_SIZE || page.numberReturned !== page.features.length || page.limit !== FIXED_PAGE_SIZE || typeof page.hasMore !== "boolean") throw new Error("La página de códigos fijos devolvió contenido o metadatos inconsistentes. Ajustá los filtros e intentá nuevamente.");
-    if (page.hasMore && (!Number.isSafeInteger(page.nextAfterId) || page.nextAfterId! <= afterId || page.features.length !== FIXED_PAGE_SIZE)) throw new Error("La paginación de códigos fijos se detuvo antes de completarse. Ajustá los filtros e intentá nuevamente.");
+    if (!page || page.type !== "FeatureCollection" || page.srid !== 4326 || !Array.isArray(page.features) || page.features.length > pageSize || page.numberReturned !== page.features.length || page.limit !== pageSize || typeof page.hasMore !== "boolean") throw new Error("La página de códigos fijos devolvió contenido o metadatos inconsistentes. Ajustá los filtros e intentá nuevamente.");
+    if (page.hasMore && (!Number.isSafeInteger(page.nextAfterId) || page.nextAfterId! <= afterId || page.features.length !== pageSize)) throw new Error("La paginación de códigos fijos se detuvo antes de completarse. Ajustá los filtros e intentá nuevamente.");
     let previousId = afterId;
     for (const feature of page.features) {
       if (!Number.isSafeInteger(feature.id) || feature.id <= previousId || seen.has(feature.id)) throw new Error("La página de códigos fijos contiene identificadores inválidos o repetidos.");
-      previousId = feature.id; seen.add(feature.id); features.push(feature);
+      previousId = feature.id; seen.add(feature.id);
     }
-    if (features.length > MAX_FIXED_FEATURES) throw new Error(`La consulta supera el máximo visible de ${MAX_FIXED_FEATURES.toLocaleString()} códigos fijos. Aplicá filtros para reducir los resultados.`);
     if (page.nextAfterId !== (previousId === afterId ? null : previousId)) throw new Error("La paginación de códigos fijos devolvió un cursor inconsistente.");
+    features.push(...page.features);
+    if (signal.aborted) throw new DOMException("The operation was aborted.", "AbortError");
+    if (options.onPage) await options.onPage(page, features.length);
+    if (signal.aborted) throw new DOMException("The operation was aborted.", "AbortError");
     if (!page.hasMore) break;
     if (page.nextAfterId !== previousId) throw new Error("La paginación de códigos fijos devolvió un cursor inconsistente.");
     afterId = page.nextAfterId!;
   }
+  if (signal.aborted) throw new DOMException("The operation was aborted.", "AbortError");
   return { type: "FeatureCollection", features, numberReturned: features.length, limit: features.length, srid: 4326 };
 };
 export const getLayerDetail = (layer: LayerId, id: number, signal?: AbortSignal) => request<LayerDetail>(`/api/layers/${layer}/${id}`, signal);

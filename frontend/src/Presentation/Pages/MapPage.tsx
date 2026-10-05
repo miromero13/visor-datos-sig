@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { GeoJSON, MapContainer, Pane, TileLayer, useMap } from "react-leaflet";
 import { useSearchParams } from "react-router-dom";
 import L from "leaflet";
@@ -8,6 +8,7 @@ import { Camera, Crosshair, Maximize, Printer, Plus, Minus, ChevronDown, MapPin,
 import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
 import { getLayerExtent, getLayerFeatures, getAllFixedCodeFeatures, getLayerDetail, getLayers, searchLayer, type Extent, type Feature, type FeatureCollection, type Layer, type LayerId, type SearchResult } from "@/Application/Services/layers";
 import "leaflet/dist/leaflet.css";
+import { appendFeaturesProgressively } from "./mapProgressiveDrawing";
 
 const colors: Record<LayerId, string> = { CodigosFijos: "#e11d48", Lotes: "#0ea5e9", Manzanas: "#7c3aed", Vias: "#f59e0b" };
 const fixedStates = [
@@ -53,6 +54,7 @@ const basemaps: Record<BasemapId, Basemap> = {
 };
 const MAX_MAP_ZOOM = 17;
 const FIXED_CODES_PANE = "fixed-codes-overlay";
+const EMPTY_FIXED_GEOJSON = { type: "FeatureCollection", features: [] } as GeoJSON.FeatureCollection;
 const allowedLayerIds = new Set<LayerId>(["CodigosFijos", "Lotes", "Manzanas", "Vias"]);
 const layerMenuOrder: LayerId[] = ["Vias", "Manzanas", "Lotes", "CodigosFijos"];
 const layerRenderOrder: LayerId[] = ["Vias", "Manzanas", "Lotes", "CodigosFijos"];
@@ -299,6 +301,34 @@ function ZoomStyledGeoJSON({ layer, data, onSelect }: { layer: Layer; data: GeoJ
   );
 }
 
+function FixedCodeDrawingLayer({ rootRef, palette, onSelect }: { rootRef: MutableRefObject<L.GeoJSON | null>; palette: Record<string, string>; onSelect: (feature: Feature) => void }) {
+  const map = useMap();
+  const paletteRef = useRef(palette);
+  const selectRef = useRef(onSelect);
+  const root = useRef<L.GeoJSON | null>(null);
+  const renderer = useMemo(() => L.svg({ pane: FIXED_CODES_PANE }), []);
+  paletteRef.current = palette;
+  selectRef.current = onSelect;
+  useEffect(() => {
+    rootRef.current = root.current;
+    return () => { rootRef.current = null; };
+  }, [rootRef]);
+  useZoomSizing(root, 1.5, 5, null);
+  useEffect(() => {
+    root.current?.eachLayer((layer) => {
+      if (layer instanceof L.Path) {
+        const child = layer as L.Path & { feature?: GeoJSON.Feature };
+        const color = fixedStateColor(child.feature?.properties?.Estado, palette);
+        child.setStyle({ color, fillColor: color });
+      }
+    });
+  }, [palette]);
+  return <GeoJSON ref={root} data={EMPTY_FIXED_GEOJSON} pane={FIXED_CODES_PANE}
+    style={(feature) => { const color = fixedStateColor(feature?.properties?.Estado, paletteRef.current); return { color, weight: 1.5 * zoomScale(map.getZoom()), fillColor: color, fillOpacity: 0.85 }; }}
+    pointToLayer={(feature, latlng) => { const color = fixedStateColor(feature.properties?.Estado, paletteRef.current); return L.circleMarker(latlng, { pane: FIXED_CODES_PANE, renderer, radius: 5 * zoomScale(map.getZoom()), weight: 1.5 * zoomScale(map.getZoom()), color, fillColor: color, fillOpacity: 0.9 }); }}
+    onEachFeature={(feature, layer) => layer.on("click", (event) => { L.DomEvent.stopPropagation(event); selectRef.current(feature as unknown as Feature); })} />;
+}
+
 export function MapPage() {
   const [palette, setPalette] = useState(loadPalette);
   const [paletteStorageError, setPaletteStorageError] = useState(false);
@@ -343,6 +373,14 @@ export function MapPage() {
   const [visible, setVisible] = useState<Set<LayerId>>(new Set());
   const [data, setData] = useState<Partial<Record<LayerId, FeatureCollection>>>({});
   const [fixedData, setFixedData] = useState<FeatureCollection | null>(null);
+  const fixedGeoJson = useRef<L.GeoJSON | null>(null);
+  const [fixedPages, setFixedPages] = useState<Feature[][]>([]);
+  const [fixedDownloaded, setFixedDownloaded] = useState(0);
+  const [fixedDrawn, setFixedDrawn] = useState(0);
+  const fixedDrawnRef = useRef(0);
+  const [fixedAttempt, setFixedAttempt] = useState(0);
+  const fixedGeneration = useRef(0);
+
   const [fixedEstado, setFixedEstado] = useState("");
   const [fixedNombreInput, setFixedNombreInput] = useState("");
   const [fixedNombre, setFixedNombre] = useState("");
@@ -417,28 +455,40 @@ export function MapPage() {
     if (!visible.has("CodigosFijos")) return;
     let cancelled = false;
     const controller = new AbortController();
-    setFixedLoading(true);
-    setFixedError("");
-    setFixedData(null);
-    if (selected?.layer.id === "CodigosFijos") {
-      setSelected(null);
-      setTarget(null);
-    }
-    getAllFixedCodeFeatures({ estado: fixedEstado ? Number(fixedEstado) : undefined, nombre: fixedNombre }, controller.signal, { minimal: true })
-      .then((result) => {
-        if (!cancelled) setFixedData(result);
-      })
-      .catch((e) => {
-        if (!cancelled && e?.name !== "AbortError") setFixedError(e instanceof Error ? e.message : "No se pudieron cargar los códigos fijos.");
-      })
-      .finally(() => {
-        if (!cancelled) setFixedLoading(false);
-      });
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [fixedEstado, fixedNombre, visible]);
+    const generation = ++fixedGeneration.current;
+    fixedDrawnRef.current = 0;
+    setFixedPages([]); setFixedDownloaded(0); setFixedDrawn(0);
+    setFixedLoading(true); setFixedError(""); setFixedData(null);
+    if (selected?.layer.id === "CodigosFijos") { setSelected(null); setTarget(null); }
+    getAllFixedCodeFeatures({ estado: fixedEstado ? Number(fixedEstado) : undefined, nombre: fixedNombre }, controller.signal, { minimal: true, pageSize: 5000, onPage: async (page, cumulativeCount) => {
+      if (cancelled || generation !== fixedGeneration.current || controller.signal.aborted) return;
+      if (!fixedGeoJson.current) throw new Error("El renderizador de códigos fijos aún no está listo.");
+      setFixedPages((previous) => [...previous, page.features]); setFixedDownloaded(cumulativeCount);
+      const drawnBeforePage = fixedDrawnRef.current;
+      let pageDrawn = 0;
+      try {
+        await appendFeaturesProgressively(page.features, (feature) => {
+          if (!cancelled && generation === fixedGeneration.current && !controller.signal.aborted) {
+            const root = fixedGeoJson.current;
+            if (root) { root.addData(feature as unknown as GeoJSON.Feature); pageDrawn++; }
+          }
+        }, controller.signal, (drawnInPage) => {
+          if (!cancelled && generation === fixedGeneration.current && !controller.signal.aborted) setFixedDrawn(drawnBeforePage + drawnInPage);
+        });
+      } catch (error) {
+        if (!cancelled && generation === fixedGeneration.current && !controller.signal.aborted) {
+          fixedDrawnRef.current = drawnBeforePage + pageDrawn;
+          setFixedDrawn(fixedDrawnRef.current);
+        }
+        throw error;
+      }
+      fixedDrawnRef.current = drawnBeforePage + pageDrawn;
+    } })
+      .then((result) => { if (!cancelled && generation === fixedGeneration.current) setFixedData(result); })
+      .catch((e) => { if (!cancelled && e?.name !== "AbortError") setFixedError(e instanceof Error ? e.message : "No se pudieron cargar los códigos fijos."); })
+      .finally(() => { if (!cancelled && generation === fixedGeneration.current) setFixedLoading(false); });
+    return () => { cancelled = true; controller.abort(); };
+  }, [fixedEstado, fixedNombre, fixedAttempt, visible.has("CodigosFijos")]);
   useEffect(() => {
     if (!selectedRouteLayer || selectedRouteId === null) return;
     let cancelled = false;
@@ -598,10 +648,12 @@ export function MapPage() {
                 <LoadedDataFit extent={extent} target={target} />
                 {basemaps[basemapId].url && <TileLayer key={basemapId} attribution={basemaps[basemapId].attribution} url={basemaps[basemapId].url} crossOrigin="anonymous" />}
                 <MapView target={target} targetLayer={selected?.layer.id ?? target?.layer ?? null} fixedRenderer={fixedRenderer} />
+                {visible.has("CodigosFijos") && <FixedCodeDrawingLayer key={`${fixedEstado}-${fixedNombre}-${fixedAttempt}`} rootRef={fixedGeoJson} palette={palette} onSelect={(feature) => { const fixedLayer = layers.find((item) => item.id === "CodigosFijos"); if (fixedLayer) selectMap(feature, fixedLayer); }} />}
                 {activeLayers.map((layer) => {
-                  const collection = layer.id === "CodigosFijos" ? fixedData : data[layer.id];
+                  if (layer.id === "CodigosFijos") return null;
+                  const collection = data[layer.id];
                   if (!collection) return null;
-                  return <ZoomStyledGeoJSON key={`${layer.id}-${layer.id === "CodigosFijos" ? `${fixedEstado}-${fixedNombre}` : "all"}`} layer={layer} data={collection as GeoJSON.FeatureCollection} onSelect={(feature) => selectMap(feature, layer)} />;
+                  return <ZoomStyledGeoJSON key={`${layer.id}-all`} layer={layer} data={collection as GeoJSON.FeatureCollection} onSelect={(feature) => selectMap(feature, layer)} />;
                 })}
               </MapContainer>
               {!loading && activeLayers.length > 0 && activeLayers.every((layer) => (layer.id === "CodigosFijos" ? fixedData : data[layer.id])?.features.length === 0) && <div className="map-empty">No hay elementos geográficos para mostrar.</div>}
@@ -715,23 +767,19 @@ export function MapPage() {
                     <p className="map-muted" role="status">
                       Escribí un nombre para buscar, o filtrá por estado.
                     </p>
-                  ) : fixedLoading ? (
-                    <p role="status">Cargando códigos fijos…</p>
-                  ) : fixedError ? (
-                    <p className="map-filter-error" role="alert">
-                      {fixedError}
-                    </p>
+                  ) : fixedError && fixedDownloaded === 0 ? (
+                    <p className="map-filter-error" role="alert">{fixedError} <button type="button" onClick={() => setFixedAttempt((attempt) => attempt + 1)}>Reintentar</button></p>
                   ) : fixedData?.features.length === 0 ? (
                     <p className="map-muted" role="status">
                       No hay códigos fijos con estos filtros.
                     </p>
-                  ) : fixedData && (fixedNombre || fixedEstado) ? (
+                  ) : fixedPages.length > 0 && (fixedNombre || fixedEstado) ? (
                     <>
-                      <p className="map-result-count" role="status">
-                        {fixedData.features.length} códigos encontrados
-                      </p>
+                      {fixedLoading && <p role="status">Cargando códigos fijos… {fixedDownloaded} recibidos; {fixedDrawn} dibujados.</p>}
+                      {fixedError && <p className="map-filter-error" role="alert">Resultados incompletos: {fixedError} <button type="button" onClick={() => setFixedAttempt((attempt) => attempt + 1)}>Reintentar</button></p>}
+                      <p className="map-result-count" role="status">{fixedDownloaded} códigos recibidos; {fixedDrawn} dibujados{fixedDownloaded > fixedDrawn ? " · mapa parcial" : ""}</p>
                       <ul className="map-result-list" aria-label="Resultados de códigos fijos">
-                        {fixedData.features.map((feature) => {
+                        {fixedPages.map((page) => page.map((feature) => {
                           const state = fixedStates.find((item) => item.value === Number(feature.properties.Estado));
                           const code = feature.properties.CodFijo ?? feature.properties.CodF_SIG ?? feature.properties.CodF_SQL ?? feature.id;
                           const isSelected = selected?.layer.id === "CodigosFijos" && selected.feature.id === feature.id;
@@ -762,7 +810,7 @@ export function MapPage() {
                               </button>
                             </li>
                           );
-                        })}
+                        }))}
                       </ul>
                     </>
                   ) : (
