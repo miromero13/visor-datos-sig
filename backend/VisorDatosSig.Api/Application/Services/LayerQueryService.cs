@@ -19,7 +19,7 @@ public sealed class LayerQueryService(IConfiguration configuration)
 
     public object Catalog() => new { layers = Layers.Values.Select(x => new { id = x.Name, label = x.Name switch { "CodigosFijos" => "Códigos fijos", "Lotes" => "Lotes", "Manzanas" => "Manzanas", _ => "Vías" }, geometryType = x.Name == "CodigosFijos" ? "Point" : x.Name == "Vias" ? "LineString" : "Polygon", srid = 4326 }) };
 
-    public async Task<object> GeoJsonAsync(string name, string? bbox, int? limit, CancellationToken cancellationToken, int? estado = null, string? nombre = null, int? afterId = null)
+    public async Task<object> GeoJsonAsync(string name, string? bbox, int? limit, CancellationToken cancellationToken, int? estado = null, string? nombre = null, int? afterId = null, bool minimal = false)
     {
         var layer = Find(name);
         if ((estado is not null || !string.IsNullOrWhiteSpace(nombre)) && layer.Name != "CodigosFijos") throw new ArgumentException("Estado and Nombre filters are only available for CodigosFijos.");
@@ -33,7 +33,7 @@ public sealed class LayerQueryService(IConfiguration configuration)
         if (estado is not null) predicates.Add("[Estado]=@estado");
         if (!string.IsNullOrWhiteSpace(nombre)) predicates.Add("CHARINDEX(@nombre,[Nombre])>0");
         if (afterId is not null) predicates.Add("[IdCodigo]>@afterId");
-        var attributes = layer.Name == "CodigosFijos" ? layer.Attributes.Append("IdCodigo").Distinct(StringComparer.OrdinalIgnoreCase).ToArray() : layer.Attributes;
+        var attributes = ProjectAttributes(layer, minimal);
         var sql = $"SELECT TOP (@limit) {string.Join(",", attributes.Select(x => $"[{x}]"))}, Geom.STAsText() AS Wkt FROM dbo.[{layer.Table}] WHERE {string.Join(" AND ", predicates)} ORDER BY [{layer.Id}]";
         var features = new List<object>();
         var featureIds = new List<int>();
@@ -122,6 +122,10 @@ public sealed class LayerQueryService(IConfiguration configuration)
         if (v[0] < -180 || v[2] > 180 || v[1] < -90 || v[3] > 90 || v[0] >= v[2] || v[1] >= v[3]) throw new ArgumentException("bbox is outside valid longitude/latitude bounds.");
         return $"POLYGON(({v[0].ToString(System.Globalization.CultureInfo.InvariantCulture)} {v[1].ToString(System.Globalization.CultureInfo.InvariantCulture)},{v[2].ToString(System.Globalization.CultureInfo.InvariantCulture)} {v[1].ToString(System.Globalization.CultureInfo.InvariantCulture)},{v[2].ToString(System.Globalization.CultureInfo.InvariantCulture)} {v[3].ToString(System.Globalization.CultureInfo.InvariantCulture)},{v[0].ToString(System.Globalization.CultureInfo.InvariantCulture)} {v[3].ToString(System.Globalization.CultureInfo.InvariantCulture)},{v[0].ToString(System.Globalization.CultureInfo.InvariantCulture)} {v[1].ToString(System.Globalization.CultureInfo.InvariantCulture)}))";
     }
+    public static string[] ProjectAttributesForTests(string name, bool minimal) => ProjectAttributes(Find(name), minimal);
+    private static string[] ProjectAttributes(LayerDefinition layer, bool minimal) => minimal
+        ? (layer.Name == "CodigosFijos" ? new[] { "CodF_SQL", "CodF_SIG", "CodFijo", "Nombre", "Estado", "IdCodigo" } : new[] { layer.Id })
+        : layer.Name == "CodigosFijos" ? layer.Attributes.Append("IdCodigo").Distinct(StringComparer.OrdinalIgnoreCase).ToArray() : layer.Attributes;
     private static LayerDefinition Find(string name) => Layers.TryGetValue(name, out var value) ? value : throw new KeyNotFoundException("The requested layer does not exist.");
     private async Task<SqlConnection> OpenAsync(CancellationToken cancellationToken)
     {

@@ -24,6 +24,7 @@ if (args.Length > 0 && args[0] == "--migrate-database")
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddAntiforgery();
+builder.Services.AddMapResponseCompression();
 builder.Services.AddCors(options => options.AddPolicy("ViteDevelopment", policy =>
     policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
 builder.Services.AddSingleton<ISqlConnectionProbe, SqlServerConnectionProbe>();
@@ -76,6 +77,7 @@ app.UseCors("ViteDevelopment");
 app.UseAntiforgery();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMapResponseCompression();
 
 static object Envelope(AuthUser user) => new { data = new { user = new { id = user.Id, login = user.Login, name = user.Name, roles = user.Roles } }, meta = new { } };
 static IResult AuthProblem() => Results.Problem(statusCode: 401, title: "Unauthorized", detail: "Login failed.");
@@ -246,9 +248,9 @@ app.MapGet("/api/search/options/via-types", async (SearchQueryService search, Ca
     try { return Results.Ok(new { data = new { values = await search.GetViaTypesAsync(cancellationToken) } }); }
     catch (SqlException) { return Results.Problem(statusCode: 503, title: "Search options unavailable", detail: "No se pudieron consultar las opciones de vías."); }
 }).RequireAuthorization();
-app.MapGet("/api/layers/{layer}/geojson", async (string layer, string? bbox, int? limit, int? estado, string? nombre, int? afterId, LayerQueryService query, CancellationToken cancellationToken) =>
+app.MapGet("/api/layers/{layer}/geojson", async (string layer, string? bbox, int? limit, int? estado, string? nombre, int? afterId, bool? minimal, LayerQueryService query, CancellationToken cancellationToken) =>
 {
-    try { return Results.Ok(await query.GeoJsonAsync(layer, bbox, limit, cancellationToken, estado, nombre, afterId)); }
+    try { return Results.Ok(await query.GeoJsonAsync(layer, bbox, limit, cancellationToken, estado, nombre, afterId, minimal == true)); }
     catch (KeyNotFoundException) { return Results.Problem(statusCode: 404, title: "Layer not found"); }
     catch (ArgumentException ex) { return Results.Problem(statusCode: 400, title: "Invalid layer query", detail: ex.Message); }
     catch (SqlException) { return Results.Problem(statusCode: 503, title: "Layer data unavailable", detail: "No se pudieron consultar las capas geográficas."); }
