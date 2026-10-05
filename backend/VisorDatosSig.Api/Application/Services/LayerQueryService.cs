@@ -8,7 +8,8 @@ namespace VisorDatosSig.Api;
 
 public sealed class LayerQueryService(IConfiguration configuration)
 {
-    public const int MaxFeatures = 1000;
+    public const int MaxFeatures = 5000;
+    public const int DefaultFeatures = 1000;
     private static readonly IReadOnlyDictionary<string, LayerDefinition> Layers = new Dictionary<string, LayerDefinition>(StringComparer.OrdinalIgnoreCase)
     {
         ["CodigosFijos"] = new("CodigosFijos", "IdCodigo", ["CodF_SQL", "CodF_SIG", "CodFijo", "Nombre", "Estado", "IdLote", "Longitud", "Latitud"]),
@@ -26,7 +27,7 @@ public sealed class LayerQueryService(IConfiguration configuration)
         if (estado is not null && estado is < 1 or > 5) throw new ArgumentException("Estado must be between 1 and 5.");
         if (afterId is not null && layer.Name != "CodigosFijos") throw new ArgumentException("Cursor pagination is only available for CodigosFijos.");
         if (afterId is < 0) throw new ArgumentException("afterId must be nonnegative.");
-        var max = Math.Clamp(limit ?? 1000, 1, MaxFeatures);
+        var max = Math.Clamp(limit ?? DefaultFeatures, 1, MaxFeatures);
         var bounds = ParseBbox(bbox);
         var predicates = new List<string> { "Geom IS NOT NULL" };
         if (bounds is not null) predicates.Add("Geom.STIntersects(geometry::STGeomFromText(@bbox,4326))=1");

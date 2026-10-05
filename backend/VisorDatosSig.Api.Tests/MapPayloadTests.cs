@@ -18,6 +18,13 @@ public sealed class MapPayloadTests
     }
 
     [Fact]
+    public void Geojson_page_cap_is_5000_and_default_remains_1000()
+    {
+        Assert.Equal(5000, LayerQueryService.MaxFeatures);
+        Assert.Equal(1000, LayerQueryService.DefaultFeatures);
+    }
+
+    [Fact]
     public void Fixed_code_projection_preserves_styling_filters_and_identifier()
     {
         var minimal = LayerQueryService.ProjectAttributesForTests("CodigosFijos", true);
