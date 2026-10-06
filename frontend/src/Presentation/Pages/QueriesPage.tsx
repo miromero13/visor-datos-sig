@@ -3,6 +3,7 @@ import { ChevronDown, MapPin } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Skeleton } from "@/Presentation/Components/ui/skeleton";
 import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
+import { ExportMenu } from "@/Presentation/Components/ExportMenu";
 import { getLayers, getViaTypes, layerFields, searchAllLayers, searchLayer, type Layer, type LayerId, type SearchResult } from "@/Application/Services/layers";
 
 const allLayers = "all" as const;
@@ -14,6 +15,8 @@ const layerFilters: Record<LayerId, string[]> = {
   Manzanas: ["UV", "MZA"],
   Vias: ["Nombre", "TipoVia"],
 };
+const idColumns: Record<LayerId, string> = { CodigosFijos: "IdCodigo", Lotes: "IdLote", Manzanas: "IdManzana", Vias: "IdVia" };
+const PAGE_SIZE = 25;
 const filterLabels: Record<string, string> = { Estado: "Estado", IdLote: "Filtrar por número de lote", NroLote: "Filtrar por número de lote", IdManzana: "Filtrar por manzana", UV: "Filtrar por UV", MZA: "Filtrar por manzana", Nombre: "Filtrar por nombre de vía", TipoVia: "Tipo de vía" };
 
 export function QueriesPage() {
@@ -28,10 +31,12 @@ export function QueriesPage() {
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [exportError, setExportError] = useState("");
   const requestId = useRef(0);
   const navigate = useNavigate();
   const fields = layerId === allLayers ? [] : layerFields[layerId];
   const filtersForLayer = layerId === allLayers ? [] : layerFilters[layerId];
+  const exportRequest = layerId === allLayers || total === 0 ? null : { layer: layerId, q: query, filters, columns: [idColumns[layerId], ...fields], page, pageSize: PAGE_SIZE };
 
   useEffect(() => {
     getLayers()
@@ -153,9 +158,16 @@ export function QueriesPage() {
               </label>
             ))}
           </div>
+
           {error && (
             <p className="map-alert" role="alert">
               {error}
+            </p>
+          )}
+
+          {exportError && (
+            <p className="map-alert" role="alert">
+              {exportError}
             </p>
           )}
 
@@ -232,9 +244,7 @@ export function QueriesPage() {
                             <tr key={`${itemLayer}-${item.id}-${index}`}>
                               {layerId === allLayers && (
                                 <td>
-                                  <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
-                                    {itemLayer ? layerLabels[itemLayer] : "—"}
-                                  </span>
+                                  <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">{itemLayer ? layerLabels[itemLayer] : "—"}</span>
                                 </td>
                               )}
                               <td className="font-mono text-xs text-slate-500">{item.id}</td>
@@ -265,31 +275,22 @@ export function QueriesPage() {
                     </table>
                   </div>
 
-                  {/* Bottom Bar: Total count on the left, Shadcn pagination on the right */}
                   <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
-                    <p className="m-0 text-xs font-medium text-slate-500">
-                      <span className="font-semibold text-slate-900">{total.toLocaleString("es-AR")}</span> resultados encontrados
-                    </p>
+                    <div className="flex items-center gap-4">
+                      <p className="m-0 text-xs font-medium text-slate-500">
+                        <span className="font-semibold text-slate-900">{total.toLocaleString("es-AR")}</span> resultados encontrados
+                      </p>
+                      <ExportMenu request={exportRequest} disabledReason={layerId === allLayers ? "Elegí una capa para exportar sus resultados." : "No hay resultados para exportar."} onError={setExportError} />
+                    </div>
 
                     <nav className="flex items-center gap-2" aria-label="Paginación de resultados">
-                      <button
-                        type="button"
-                        className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:pointer-events-none disabled:opacity-40"
-                        disabled={page <= 1 || loading}
-                        onClick={() => setPage((value) => value - 1)}
-                      >
+                      <button type="button" className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:pointer-events-none disabled:opacity-40" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)}>
                         Anterior
                       </button>
                       <span className="px-2 text-xs font-medium text-slate-600">
-                        Página <span className="font-semibold text-slate-900">{page}</span> de{" "}
-                        <span className="font-semibold text-slate-900">{Math.max(1, Math.ceil(total / 25))}</span>
+                        Página <span className="font-semibold text-slate-900">{page}</span> de <span className="font-semibold text-slate-900">{Math.max(1, Math.ceil(total / PAGE_SIZE))}</span>
                       </span>
-                      <button
-                        type="button"
-                        className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:pointer-events-none disabled:opacity-40"
-                        disabled={page * 25 >= total || loading}
-                        onClick={() => setPage((value) => value + 1)}
-                      >
+                      <button type="button" className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:pointer-events-none disabled:opacity-40" disabled={page * PAGE_SIZE >= total || loading} onClick={() => setPage((value) => value + 1)}>
                         Siguiente
                       </button>
                     </nav>
