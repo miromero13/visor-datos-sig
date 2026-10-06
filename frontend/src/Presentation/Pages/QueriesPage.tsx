@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, MapPin } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Skeleton } from "@/Presentation/Components/ui/skeleton";
 import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
 import { getLayers, getViaTypes, layerFields, searchAllLayers, searchLayer, type Layer, type LayerId, type SearchResult } from "@/Application/Services/layers";
 
@@ -8,8 +9,10 @@ const allLayers = "all" as const;
 type LayerChoice = LayerId | typeof allLayers;
 const layerLabels: Record<LayerId, string> = { CodigosFijos: "Códigos fijos", Lotes: "Lotes", Manzanas: "Manzanas", Vias: "Vías" };
 const layerFilters: Record<LayerId, string[]> = {
-  CodigosFijos: ["Estado", "IdLote"], Lotes: ["NroLote", "IdManzana"],
-  Manzanas: ["UV", "MZA"], Vias: ["Nombre", "TipoVia"]
+  CodigosFijos: ["Estado", "IdLote"],
+  Lotes: ["NroLote", "IdManzana"],
+  Manzanas: ["UV", "MZA"],
+  Vias: ["Nombre", "TipoVia"],
 };
 const filterLabels: Record<string, string> = { Estado: "Estado", IdLote: "Filtrar por número de lote", NroLote: "Filtrar por número de lote", IdManzana: "Filtrar por manzana", UV: "Filtrar por UV", MZA: "Filtrar por manzana", Nombre: "Filtrar por nombre de vía", TipoVia: "Tipo de vía" };
 
@@ -31,8 +34,12 @@ export function QueriesPage() {
   const filtersForLayer = layerId === allLayers ? [] : layerFilters[layerId];
 
   useEffect(() => {
-    getLayers().then(setLayers).catch(e => setError(e instanceof Error ? e.message : "No se pudieron cargar las capas."));
-    getViaTypes().then(setViaTypes).catch(e => setError(e instanceof Error ? e.message : "No se pudieron cargar los tipos de vía."));
+    getLayers()
+      .then(setLayers)
+      .catch((e) => setError(e instanceof Error ? e.message : "No se pudieron cargar las capas."));
+    getViaTypes()
+      .then(setViaTypes)
+      .catch((e) => setError(e instanceof Error ? e.message : "No se pudieron cargar los tipos de vía."));
   }, []);
 
   useEffect(() => {
@@ -41,9 +48,7 @@ export function QueriesPage() {
       setLoading(true);
       setError("");
       try {
-        const result = layerId === allLayers
-          ? await searchAllLayers(query, page)
-          : await searchLayer(layerId, query, filters, page);
+        const result = layerId === allLayers ? await searchAllLayers(query, page) : await searchLayer(layerId, query, filters, page);
         if (currentRequest !== requestId.current) return;
         setItems(result.data.items);
         setTotal(result.data.total);
@@ -57,39 +62,244 @@ export function QueriesPage() {
     return () => window.clearTimeout(timer);
   }, [layerId, query, filters, page]);
 
-  const chooseLayer = (value: LayerChoice) => { setLayerId(value); setQuery(""); setFilters({}); setItems([]); setPage(1); setSearched(false); };
-  const updateFilter = (field: string, value: string) => { setFilters(previous => ({ ...previous, [field]: value })); setPage(1); };
+  const chooseLayer = (value: LayerChoice) => {
+    setLayerId(value);
+    setQuery("");
+    setFilters({});
+    setItems([]);
+    setPage(1);
+    setSearched(false);
+  };
+  const updateFilter = (field: string, value: string) => {
+    setFilters((previous) => ({ ...previous, [field]: value }));
+    setPage(1);
+  };
   const openOnMap = (item: SearchResult) => {
     const targetLayer = item.layer ?? (layerId === allLayers ? undefined : layerId);
     if (targetLayer) navigate(`/map?layer=${encodeURIComponent(targetLayer)}&id=${encodeURIComponent(String(item.id))}`);
   };
 
-  return <AuthenticatedLayout activeItem="Consultas"><main className="queries-page">
-    <header className="queries-heading"><p className="map-eyebrow">INFORMACIÓN TERRITORIAL</p><h1>Consultas y filtros</h1><p>Buscá entidades y consultá sus atributos.</p></header>
-    <section className="search-panel" aria-label="Búsqueda de elementos"><h2>Buscar en las capas</h2>
-      <div className="search-controls">
-        <label>Capa<span className="relative block">
-          <select className="block h-11 w-full cursor-pointer appearance-none rounded-md border border-slate-300 bg-white px-3 pr-10 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 [&>option]:cursor-pointer" value={layerId} onChange={e => chooseLayer(e.target.value as LayerChoice)} aria-label="Capa de búsqueda">
-            <option value={allLayers}>Todas las capas</option>{layers.map(layer => <option key={layer.id} value={layer.id}>{layer.label}</option>)}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" size={17} aria-hidden="true" />
-        </span></label>
-        <label className="search-query">Buscar por código, nombre, lote o vía<input value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} placeholder="Ingresá texto para buscar" /></label>
-        {filtersForLayer.map(field => <label key={field}>{filterLabels[field] ?? field}
-          {field === "Estado" ? <span className="relative block">
-            <select className="block h-11 w-full cursor-pointer appearance-none rounded-md border border-slate-300 bg-white px-3 pr-10 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 [&>option]:cursor-pointer" value={filters[field] ?? ""} onChange={e => updateFilter(field, e.target.value)}><option value="">Todos</option>{[1, 2, 3, 4, 5].map(value => <option key={value} value={value}>{value}</option>)}</select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" size={17} aria-hidden="true" />
-          </span>
-            : field === "TipoVia" ? <span className="relative block">
-              <select className="block h-11 w-full cursor-pointer appearance-none rounded-md border border-slate-300 bg-white px-3 pr-10 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 [&>option]:cursor-pointer" value={filters[field] ?? ""} onChange={e => updateFilter(field, e.target.value)}><option value="">Todos</option>{viaTypes.map(value => <option key={value} value={value}>{value}</option>)}</select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" size={17} aria-hidden="true" />
-            </span>
-              : <input inputMode={field === "IdLote" || field === "IdManzana" || field === "NroLote" ? "numeric" : "text"} value={filters[field] ?? ""} onChange={e => updateFilter(field, e.target.value)} />}
-        </label>)}
-      </div>
-      {error && <p className="map-alert" role="alert">{error}</p>}{loading && <p role="status">Buscando…</p>}
-      {searched && !loading && !error && <><p className="search-total">{total} resultados</p>{items.length === 0 ? <p className="map-muted">No se encontraron resultados.</p> : <><div className="search-table-wrap"><table className="search-table"><thead><tr>{layerId === allLayers && <th>Capa</th>}<th>ID</th>{layerId === allLayers ? <th>Atributos</th> : fields.map(field => <th key={field}>{field}</th>)}<th>Acción</th></tr></thead><tbody>{items.map((item, index) => { const itemLayer = item.layer ?? (layerId === allLayers ? undefined : layerId); const displayFields = fields.length ? fields : itemLayer === "Manzanas" ? ["UV", "MZA"] : Object.keys(item.properties).filter(key => !key.startsWith("Id") && key !== "OBJECTID").slice(0, 3); return <tr key={`${itemLayer}-${item.id}-${index}`}>
-          {layerId === allLayers && <td>{itemLayer ? layerLabels[itemLayer] : "—"}</td>}<td>{item.id}</td>{layerId === allLayers ? <td>{displayFields.map(field => item.properties[field] == null ? "" : `${field}: ${String(item.properties[field])}`).filter(Boolean).join(" · ") || "—"}</td> : displayFields.map(field => <td key={field}>{item.properties[field] == null ? "—" : String(item.properties[field])}</td>)}<td><button className="query-map-link" type="button" onClick={() => openOnMap(item)}><MapPin size={14} aria-hidden="true" />Ver en mapa</button></td></tr>; })}</tbody></table></div><nav className="search-pagination" aria-label="Paginación"><button type="button" disabled={page <= 1 || loading} onClick={() => setPage(value => value - 1)}>Anterior</button><span>Página {page} de {Math.max(1, Math.ceil(total / 25))}</span><button type="button" disabled={page * 25 >= total || loading} onClick={() => setPage(value => value + 1)}>Siguiente</button></nav></>}</>}
-    </section>
-  </main></AuthenticatedLayout>;
+  return (
+    <AuthenticatedLayout activeItem="Consultas">
+      <main className="queries-page">
+        <header className="queries-heading">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Consultas y filtros</h1>
+            <p className="m-0 text-xs text-slate-500">Buscá entidades territoriales y consultá sus atributos en tiempo real.</p>
+          </div>
+        </header>
+        <section className="search-panel" aria-label="Búsqueda de elementos">
+          <div className="border-b border-slate-100 pb-3">
+            <h2 className="text-sm font-semibold text-slate-900 tracking-tight">Filtros de búsqueda</h2>
+            <p className="m-0 text-xs text-slate-400">Seleccioná una capa e ingresá términos de búsqueda para filtrar la base de datos.</p>
+          </div>
+          <div className="search-controls pt-1">
+            <label>
+              Capa
+              <span className="relative block">
+                <select className="block h-9.5 w-full cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white px-3 pr-9 text-xs font-medium text-slate-800 shadow-2xs outline-none transition hover:border-slate-300 focus:border-blue-600 focus:ring-3 focus:ring-blue-600/15 [&>option]:cursor-pointer" value={layerId} onChange={(e) => chooseLayer(e.target.value as LayerChoice)} aria-label="Capa de búsqueda">
+                  <option value={allLayers}>Todas las capas</option>
+                  {layers.map((layer) => (
+                    <option key={layer.id} value={layer.id}>
+                      {layer.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} aria-hidden="true" />
+              </span>
+            </label>
+            <label className="search-query">
+              Buscar por código, nombre, lote o vía
+              <input
+                className="h-9.5 rounded-lg border border-slate-200 bg-white px-3 text-xs shadow-2xs outline-none transition hover:border-slate-300 focus:border-blue-600 focus:ring-3 focus:ring-blue-600/15"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Ingresá texto para buscar…"
+              />
+            </label>
+            {filtersForLayer.map((field) => (
+              <label key={field}>
+                {filterLabels[field] ?? field}
+                {field === "Estado" ? (
+                  <span className="relative block">
+                    <select className="block h-9.5 w-full cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white px-3 pr-9 text-xs font-medium text-slate-800 shadow-2xs outline-none transition hover:border-slate-300 focus:border-blue-600 focus:ring-3 focus:ring-blue-600/15 [&>option]:cursor-pointer" value={filters[field] ?? ""} onChange={(e) => updateFilter(field, e.target.value)}>
+                      <option value="">Todos</option>
+                      {[1, 2, 3, 4, 5].map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} aria-hidden="true" />
+                  </span>
+                ) : field === "TipoVia" ? (
+                  <span className="relative block">
+                    <select className="block h-9.5 w-full cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white px-3 pr-9 text-xs font-medium text-slate-800 shadow-2xs outline-none transition hover:border-slate-300 focus:border-blue-600 focus:ring-3 focus:ring-blue-600/15 [&>option]:cursor-pointer" value={filters[field] ?? ""} onChange={(e) => updateFilter(field, e.target.value)}>
+                      <option value="">Todos</option>
+                      {viaTypes.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} aria-hidden="true" />
+                  </span>
+                ) : (
+                  <input className="h-9.5 rounded-lg border border-slate-200 bg-white px-3 text-xs shadow-2xs outline-none transition hover:border-slate-300 focus:border-blue-600 focus:ring-3 focus:ring-blue-600/15" inputMode={field === "IdLote" || field === "IdManzana" || field === "NroLote" ? "numeric" : "text"} value={filters[field] ?? ""} onChange={(e) => updateFilter(field, e.target.value)} />
+                )}
+              </label>
+            ))}
+          </div>
+          {error && (
+            <p className="map-alert" role="alert">
+              {error}
+            </p>
+          )}
+
+          {loading && (
+            <div role="status" aria-label="Buscando resultados" className="flex flex-1 flex-col min-h-0 pt-2">
+              <div className="search-table-wrap">
+                <table className="search-table">
+                  <thead>
+                    <tr>
+                      {layerId === allLayers && <th>Capa</th>}
+                      <th>ID</th>
+                      {layerId === allLayers ? <th>Atributos</th> : fields.map((field) => <th key={field}>{field}</th>)}
+                      <th className="text-right">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[1, 2, 3, 4, 5, 6, 7].map((row) => (
+                      <tr key={`skeleton-${row}`}>
+                        {layerId === allLayers && (
+                          <td>
+                            <Skeleton className="h-4 w-20 rounded-md" />
+                          </td>
+                        )}
+                        <td>
+                          <Skeleton className="h-4 w-12 rounded-sm" />
+                        </td>
+                        <td>
+                          <Skeleton className="h-4 w-48 rounded-sm" />
+                        </td>
+                        <td className="text-right">
+                          <Skeleton className="ml-auto h-6 w-24 rounded-md" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex shrink-0 items-center justify-between border-t border-slate-100 pt-3">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-8 w-44 rounded-md" />
+              </div>
+            </div>
+          )}
+
+          {searched && !loading && !error && (
+            <>
+              {items.length === 0 ? (
+                <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 p-8 text-center">
+                  <p className="text-sm text-slate-500">No se encontraron resultados para los criterios seleccionados.</p>
+                </div>
+              ) : (
+                <div className="flex flex-1 flex-col min-h-0 pt-2">
+                  <div className="search-table-wrap">
+                    <table className="search-table">
+                      <thead>
+                        <tr>
+                          {layerId === allLayers && <th>Capa</th>}
+                          <th>ID</th>
+                          {layerId === allLayers ? <th>Atributos</th> : fields.map((field) => <th key={field}>{field}</th>)}
+                          <th className="text-right">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((item, index) => {
+                          const itemLayer = item.layer ?? (layerId === allLayers ? undefined : layerId);
+                          const displayFields = fields.length
+                            ? fields
+                            : itemLayer === "Manzanas"
+                              ? ["UV", "MZA"]
+                              : Object.keys(item.properties)
+                                  .filter((key) => !key.startsWith("Id") && key !== "OBJECTID")
+                                  .slice(0, 3);
+                          return (
+                            <tr key={`${itemLayer}-${item.id}-${index}`}>
+                              {layerId === allLayers && (
+                                <td>
+                                  <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                                    {itemLayer ? layerLabels[itemLayer] : "—"}
+                                  </span>
+                                </td>
+                              )}
+                              <td className="font-mono text-xs text-slate-500">{item.id}</td>
+                              {layerId === allLayers ? (
+                                <td className="text-slate-600">
+                                  {displayFields
+                                    .map((field) => (item.properties[field] == null ? "" : `${field}: ${String(item.properties[field])}`))
+                                    .filter(Boolean)
+                                    .join(" · ") || "—"}
+                                </td>
+                              ) : (
+                                displayFields.map((field) => (
+                                  <td key={field} className="text-slate-700">
+                                    {item.properties[field] == null ? "—" : String(item.properties[field])}
+                                  </td>
+                                ))
+                              )}
+                              <td className="text-right">
+                                <button className="query-map-link ml-auto" type="button" onClick={() => openOnMap(item)}>
+                                  <MapPin size={13} aria-hidden="true" />
+                                  Ver en mapa
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Bottom Bar: Total count on the left, Shadcn pagination on the right */}
+                  <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+                    <p className="m-0 text-xs font-medium text-slate-500">
+                      <span className="font-semibold text-slate-900">{total.toLocaleString("es-AR")}</span> resultados encontrados
+                    </p>
+
+                    <nav className="flex items-center gap-2" aria-label="Paginación de resultados">
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:pointer-events-none disabled:opacity-40"
+                        disabled={page <= 1 || loading}
+                        onClick={() => setPage((value) => value - 1)}
+                      >
+                        Anterior
+                      </button>
+                      <span className="px-2 text-xs font-medium text-slate-600">
+                        Página <span className="font-semibold text-slate-900">{page}</span> de{" "}
+                        <span className="font-semibold text-slate-900">{Math.max(1, Math.ceil(total / 25))}</span>
+                      </span>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:pointer-events-none disabled:opacity-40"
+                        disabled={page * 25 >= total || loading}
+                        onClick={() => setPage((value) => value + 1)}
+                      >
+                        Siguiente
+                      </button>
+                    </nav>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      </main>
+    </AuthenticatedLayout>
+  );
 }

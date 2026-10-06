@@ -5,6 +5,7 @@ import L from "leaflet";
 import { createRoot } from "react-dom/client";
 import html2canvas from "html2canvas";
 import { Camera, Crosshair, Maximize, Printer, Plus, Minus, ChevronDown, MapPin, ExternalLink, X } from "lucide-react";
+import { Skeleton } from "@/Presentation/Components/ui/skeleton";
 import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
 import { getLayerExtent, getLayerFeatures, getAllFixedCodeFeatures, getLayerDetail, getLayers, searchLayer, type Extent, type Feature, type FeatureCollection, type Layer, type LayerId, type SearchResult } from "@/Application/Services/layers";
 import "leaflet/dist/leaflet.css";
@@ -59,6 +60,7 @@ const allowedLayerIds = new Set<LayerId>(["CodigosFijos", "Lotes", "Manzanas", "
 const layerMenuOrder: LayerId[] = ["Vias", "Manzanas", "Lotes", "CodigosFijos"];
 const layerRenderOrder: LayerId[] = ["Vias", "Manzanas", "Lotes", "CodigosFijos"];
 const initialMapCenter: L.LatLngExpression = [-16.39, -60.97];
+const INITIAL_MAP_ZOOM = 14;
 function fitMapOverview(map: L.Map, bounds: L.LatLngBoundsExpression) {
   map.fitBounds(bounds, { paddingTopLeft: [40, 40], paddingBottomRight: [88, 88], maxZoom: MAX_MAP_ZOOM, animate: false });
 }
@@ -92,7 +94,7 @@ function MapToolbarControl({ extent, fullscreen, toggleFullscreen, printMap, exp
               [currentExtent.south, currentExtent.west],
               [currentExtent.north, currentExtent.east],
             ]);
-          else map.setView(initialMapCenter, Math.min(map.getZoom(), MAX_MAP_ZOOM));
+          else map.setView(initialMapCenter, Math.max(INITIAL_MAP_ZOOM, Math.min(map.getZoom(), MAX_MAP_ZOOM)));
         },
         () => handlers.current.toggleFullscreen(),
         () => handlers.current.printMap(),
@@ -617,7 +619,6 @@ export function MapPage() {
         <main className="map-page">
           <div className="map-heading">
             <div>
-              <p className="map-eyebrow">INFORMACIÓN TERRITORIAL</p>
               <h1>Visor de mapa</h1>
               <p>Explorá las capas geográficas disponibles.</p>
             </div>
@@ -640,7 +641,7 @@ export function MapPage() {
           )}
           <div className="map-workspace" ref={workspaceRef}>
             <section className="map-canvas" ref={mapCanvasRef} aria-label="Mapa interactivo">
-              <MapContainer center={initialMapCenter} zoom={12} maxZoom={MAX_MAP_ZOOM} zoomControl={false} scrollWheelZoom preferCanvas className="leaflet-map">
+              <MapContainer center={initialMapCenter} zoom={INITIAL_MAP_ZOOM} maxZoom={MAX_MAP_ZOOM} zoomControl={false} scrollWheelZoom preferCanvas className="leaflet-map">
                 <Pane name={FIXED_CODES_PANE} style={{ zIndex: 625 }} />
                 <MapClickHandler onEmptyClick={clearSelection} />
                 <MapToolbarControl extent={extent} fullscreen={fullscreen} toggleFullscreen={() => void toggleFullscreen()} printMap={() => void printMap()} exportPng={() => void exportPng()} />
@@ -677,7 +678,22 @@ export function MapPage() {
                     </button>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-2">
-                    {detailLoading && <p role="status" className="py-3 text-xs text-slate-600">Cargando detalle…</p>}
+                    {detailLoading && (
+                      <div role="status" aria-label="Cargando detalle del elemento" className="space-y-3 py-3">
+                        <div className="space-y-2">
+                          <Skeleton className="h-3 w-20" />
+                          <Skeleton className="h-4 w-40" />
+                        </div>
+                        <div className="space-y-2">
+                          <Skeleton className="h-3 w-16" />
+                          <Skeleton className="h-4 w-32" />
+                        </div>
+                        <div className="space-y-2">
+                          <Skeleton className="h-3 w-24" />
+                          <Skeleton className="h-4 w-48" />
+                        </div>
+                      </div>
+                    )}
                     {detailError && <div role="alert" className="py-3 text-xs text-red-700">{detailError} <button type="button" onClick={retryDetail} className="underline">Reintentar</button></div>}
                     <dl className="m-0">
                       {Object.entries(detail?.layerId === selected.layer.id && detail.featureId === selected.feature.id ? detail.feature.properties : {}).map(([key, value]) => (
@@ -708,7 +724,7 @@ export function MapPage() {
               )}
             </section>
             <aside className="map-sidebar" aria-label="Controles del mapa">
-              <div role="tablist" aria-label="Secciones del panel" className="mb-4 grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1">
+              <div role="tablist" aria-label="Secciones del panel" className="mb-4 grid grid-cols-3 gap-1 rounded-lg border border-slate-200/80 bg-slate-100/90 p-1">
                 {sidebarTabs.map((tab, index) => (
                   <button
                     key={tab.id}
@@ -718,7 +734,11 @@ export function MapPage() {
                     aria-selected={sidebarTab === tab.id}
                     aria-controls={`map-panel-${tab.id}`}
                     tabIndex={sidebarTab === tab.id ? 0 : -1}
-                    className={`min-h-11 rounded-md px-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${sidebarTab === tab.id ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:bg-slate-200"}`}
+                    className={`flex h-8.5 cursor-pointer items-center justify-center rounded-md px-3 text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 ${
+                      sidebarTab === tab.id
+                        ? "bg-white text-slate-900 shadow-2xs font-semibold"
+                        : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/60"
+                    }`}
                     onClick={() => setSidebarTab(tab.id)}
                     onKeyDown={(event) => {
                       let next = index;
@@ -840,7 +860,17 @@ export function MapPage() {
                   <h2 id="map-layers-heading">Capas visibles</h2>
                   <p className="map-muted">Activá o desactivá información del mapa.</p>
                   {loading ? (
-                    <p role="status">Cargando capas…</p>
+                    <div role="status" aria-label="Cargando capas" className="space-y-3 pt-2">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="flex items-center justify-between py-2 border-b border-slate-100">
+                          <div className="flex items-center gap-2.5">
+                            <Skeleton className="size-4 rounded-sm" />
+                            <Skeleton className="h-4 w-28" />
+                          </div>
+                          <Skeleton className="size-5 rounded-md" />
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     orderedLayers.map((layer) => (
                       <div key={layer.id}>

@@ -124,7 +124,6 @@ export function MigrationPage() {
     <AuthenticatedLayout activeItem="Migración">
       <main className="min-w-0 flex-1 px-4 py-8 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-4xl">
-          <p className="text-xs font-semibold uppercase tracking-widest text-blue-700">Administración de datos</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Migración de capas</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Seleccioná los componentes Shapefile de las capas aprobadas, validá el contenido y luego ejecutá la migración. Los archivos se envían a la API solo al validar o ejecutar; no se guardan en el navegador.</p>
 
