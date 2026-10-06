@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, MapPin } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
+import { ExportMenu } from "@/Presentation/Components/ExportMenu";
 import { getLayers, getViaTypes, layerFields, searchAllLayers, searchLayer, type Layer, type LayerId, type SearchResult } from "@/Application/Services/layers";
 
 const allLayers = "all" as const;
@@ -11,6 +12,8 @@ const layerFilters: Record<LayerId, string[]> = {
   CodigosFijos: ["Estado", "IdLote"], Lotes: ["NroLote", "IdManzana"],
   Manzanas: ["UV", "MZA"], Vias: ["Nombre", "TipoVia"]
 };
+const idColumns: Record<LayerId, string> = { CodigosFijos: "IdCodigo", Lotes: "IdLote", Manzanas: "IdManzana", Vias: "IdVia" };
+const PAGE_SIZE = 25;
 const filterLabels: Record<string, string> = { Estado: "Estado", IdLote: "Filtrar por número de lote", NroLote: "Filtrar por número de lote", IdManzana: "Filtrar por manzana", UV: "Filtrar por UV", MZA: "Filtrar por manzana", Nombre: "Filtrar por nombre de vía", TipoVia: "Tipo de vía" };
 
 export function QueriesPage() {
@@ -25,10 +28,12 @@ export function QueriesPage() {
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [exportError, setExportError] = useState("");
   const requestId = useRef(0);
   const navigate = useNavigate();
   const fields = layerId === allLayers ? [] : layerFields[layerId];
   const filtersForLayer = layerId === allLayers ? [] : layerFilters[layerId];
+  const exportRequest = layerId === allLayers || total === 0 ? null : { layer: layerId, q: query, filters, columns: [idColumns[layerId], ...fields], page, pageSize: PAGE_SIZE };
 
   useEffect(() => {
     getLayers().then(setLayers).catch(e => setError(e instanceof Error ? e.message : "No se pudieron cargar las capas."));
@@ -88,7 +93,7 @@ export function QueriesPage() {
         </label>)}
       </div>
       {error && <p className="map-alert" role="alert">{error}</p>}{loading && <p role="status">Buscando…</p>}
-      {searched && !loading && !error && <><p className="search-total">{total} resultados</p>{items.length === 0 ? <p className="map-muted">No se encontraron resultados.</p> : <><div className="search-table-wrap"><table className="search-table"><thead><tr>{layerId === allLayers && <th>Capa</th>}<th>ID</th>{layerId === allLayers ? <th>Atributos</th> : fields.map(field => <th key={field}>{field}</th>)}<th>Acción</th></tr></thead><tbody>{items.map((item, index) => { const itemLayer = item.layer ?? (layerId === allLayers ? undefined : layerId); const displayFields = fields.length ? fields : itemLayer === "Manzanas" ? ["UV", "MZA"] : Object.keys(item.properties).filter(key => !key.startsWith("Id") && key !== "OBJECTID").slice(0, 3); return <tr key={`${itemLayer}-${item.id}-${index}`}>
+      {searched && !loading && !error && <><div className="flex flex-wrap items-center justify-between gap-3"><p className="search-total">{total} resultados</p><ExportMenu request={exportRequest} disabledReason={layerId === allLayers ? "Elegí una capa para exportar sus resultados." : "No hay resultados para exportar."} onError={setExportError} /></div>{exportError && <p className="map-alert" role="alert">{exportError}</p>}{items.length === 0 ? <p className="map-muted">No se encontraron resultados.</p> : <><div className="search-table-wrap"><table className="search-table"><thead><tr>{layerId === allLayers && <th>Capa</th>}<th>ID</th>{layerId === allLayers ? <th>Atributos</th> : fields.map(field => <th key={field}>{field}</th>)}<th>Acción</th></tr></thead><tbody>{items.map((item, index) => { const itemLayer = item.layer ?? (layerId === allLayers ? undefined : layerId); const displayFields = fields.length ? fields : itemLayer === "Manzanas" ? ["UV", "MZA"] : Object.keys(item.properties).filter(key => !key.startsWith("Id") && key !== "OBJECTID").slice(0, 3); return <tr key={`${itemLayer}-${item.id}-${index}`}>
           {layerId === allLayers && <td>{itemLayer ? layerLabels[itemLayer] : "—"}</td>}<td>{item.id}</td>{layerId === allLayers ? <td>{displayFields.map(field => item.properties[field] == null ? "" : `${field}: ${String(item.properties[field])}`).filter(Boolean).join(" · ") || "—"}</td> : displayFields.map(field => <td key={field}>{item.properties[field] == null ? "—" : String(item.properties[field])}</td>)}<td><button className="query-map-link" type="button" onClick={() => openOnMap(item)}><MapPin size={14} aria-hidden="true" />Ver en mapa</button></td></tr>; })}</tbody></table></div><nav className="search-pagination" aria-label="Paginación"><button type="button" disabled={page <= 1 || loading} onClick={() => setPage(value => value - 1)}>Anterior</button><span>Página {page} de {Math.max(1, Math.ceil(total / 25))}</span><button type="button" disabled={page * 25 >= total || loading} onClick={() => setPage(value => value + 1)}>Siguiente</button></nav></>}</>}
     </section>
   </main></AuthenticatedLayout>;

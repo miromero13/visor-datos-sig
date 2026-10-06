@@ -26,7 +26,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddAntiforgery();
 builder.Services.AddMapResponseCompression();
 builder.Services.AddCors(options => options.AddPolicy("ViteDevelopment", policy =>
-    policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
+    policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod().AllowCredentials().WithExposedHeaders("Content-Disposition")));
 builder.Services.AddSingleton<ISqlConnectionProbe, SqlServerConnectionProbe>();
 builder.Services.AddSingleton<AuthService>();
 var sessionRegistry = new SessionRegistry(builder.Configuration);
@@ -36,6 +36,7 @@ builder.Services.AddScoped<ShapefileMigrationService>();
 builder.Services.AddScoped<CodigoFijoSimulationService>();
 builder.Services.AddScoped<LayerQueryService>();
 builder.Services.AddScoped<SearchQueryService>();
+builder.Services.AddReportExports();
 var tokenService = new JwtTokenService(builder.Configuration, sessionRegistry);
 builder.Services.AddSingleton(tokenService);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
@@ -267,6 +268,8 @@ app.MapGet("/api/layers/{layer}/{id:int}", async (string layer, int id, LayerQue
     catch (KeyNotFoundException) { return Results.Problem(statusCode: 404, title: "Layer not found"); }
     catch (SqlException) { return Results.Problem(statusCode: 503, title: "Layer data unavailable", detail: "No se pudo consultar el elemento geográfico."); }
 }).RequireAuthorization();
+
+app.MapReportExports();
 
 app.MapPost("/api/shapefile-sources/analyze", ([FromForm] IFormFileCollection files) =>
 {

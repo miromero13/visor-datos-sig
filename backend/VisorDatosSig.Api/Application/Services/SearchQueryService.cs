@@ -1,10 +1,13 @@
 using System.Data;
+using System.Runtime.CompilerServices;
 using Microsoft.Data.SqlClient;
 using NetTopologySuite.IO;
 
 namespace VisorDatosSig.Api;
 
-public sealed class SearchQueryService(IConfiguration configuration)
+public sealed record SearchCriteria(string Layer, string? Q, IReadOnlyDictionary<string, string?> Filters, string? SortBy, string? SortDirection);
+
+public sealed class SearchQueryService(IConfiguration configuration) : IExportRowSource
 {
     public const int DefaultPageSize = 25;
     public const int MaxPageSize = 100;
@@ -18,39 +21,17 @@ public sealed class SearchQueryService(IConfiguration configuration)
 
     public async Task<object> SearchAsync(string layerName, string? q, int page, int? pageSize, string? sortBy, string? sortDirection, IReadOnlyDictionary<string, string?> filters, CancellationToken cancellationToken)
     {
-        if (!Layers.TryGetValue(layerName, out var layer)) throw new KeyNotFoundException("The requested layer does not exist.");
         if (page < 1) throw new ArgumentException("page must be at least 1.");
         var size = Math.Clamp(pageSize ?? DefaultPageSize, 1, MaxPageSize);
-        var sort = string.IsNullOrWhiteSpace(sortBy) ? layer.Id : layer.Attributes.FirstOrDefault(x => x.Equals(sortBy, StringComparison.OrdinalIgnoreCase)) ?? throw new ArgumentException("sortBy is not an approved field.");
-        var direction = string.IsNullOrWhiteSpace(sortDirection) || sortDirection.Equals("asc", StringComparison.OrdinalIgnoreCase) ? "ASC" : sortDirection.Equals("desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : throw new ArgumentException("sortDirection must be asc or desc.");
-        var clauses = new List<string> { "Geom IS NOT NULL" };
-        var parameters = new List<SqlParameter>();
-        if (!string.IsNullOrWhiteSpace(q))
-        {
-            clauses.Add("(" + string.Join(" OR ", layer.SearchFields.Select((field, i) => $"TRY_CONVERT(nvarchar(4000),[{field}]) LIKE @q{i}")) + ")");
-            foreach (var (field, i) in layer.SearchFields.Select((x, i) => (x, i))) parameters.Add(new SqlParameter($"@q{i}", SqlDbType.NVarChar, 4000) { Value = $"%{q.Trim()}%" });
-        }
-        foreach (var (key, value) in filters)
-        {
-            if (string.IsNullOrWhiteSpace(value)) continue;
-            var field = layer.Attributes.FirstOrDefault(x => x.Equals(key, StringComparison.OrdinalIgnoreCase));
-            if (field is null) throw new ArgumentException($"Filter '{key}' is not approved for this layer.");
-            var parameterName = "@f" + parameters.Count;
-            var exactMatch = field.Equals("Estado", StringComparison.OrdinalIgnoreCase) || field.Equals("TipoVia", StringComparison.OrdinalIgnoreCase);
-            clauses.Add(exactMatch
-                ? $"TRY_CONVERT(nvarchar(4000),[{field}]) = {parameterName}"
-                : $"TRY_CONVERT(nvarchar(4000),[{field}]) LIKE {parameterName}");
-            parameters.Add(new SqlParameter(parameterName, SqlDbType.NVarChar, 4000) { Value = exactMatch ? value.Trim() : $"%{value.Trim()}%" });
-        }
-        var where = string.Join(" AND ", clauses);
+        var query = Build(new SearchCriteria(layerName, q, filters, sortBy, sortDirection));
+        var layer = query.Layer;
         var select = string.Join(",", layer.Attributes.Select(x => $"[{x}]"));
-        var tieBreaker = sort.Equals(layer.Id, StringComparison.OrdinalIgnoreCase) ? "" : $", [{layer.Id}] ASC";
-        var sql = $"SELECT COUNT_BIG(*) FROM dbo.[{layer.Table}] WHERE {where}; SELECT {select}, Geom.STAsText() AS Wkt FROM dbo.[{layer.Table}] WHERE {where} ORDER BY [{sort}] {direction}{tieBreaker} OFFSET @offset ROWS FETCH NEXT @size ROWS ONLY";
+        var sql = $"SELECT COUNT_BIG(*) FROM dbo.[{layer.Table}] WHERE {query.Where}; SELECT {select}, Geom.STAsText() AS Wkt FROM dbo.[{layer.Table}] WHERE {query.Where} ORDER BY {query.OrderBy} OFFSET @offset ROWS FETCH NEXT @size ROWS ONLY";
         var items = new List<object>();
         long total;
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = new SqlCommand(sql, connection);
-        foreach (var parameter in parameters) command.Parameters.Add(parameter);
+        foreach (var parameter in query.Parameters) command.Parameters.Add(parameter);
         command.Parameters.Add("@offset", SqlDbType.BigInt).Value = (long)(page - 1) * size;
         command.Parameters.Add("@size", SqlDbType.Int).Value = size;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -65,6 +46,70 @@ public sealed class SearchQueryService(IConfiguration configuration)
             items.Add(new { id = properties.GetValueOrDefault(layer.Id), properties, geometry, type = "Feature" });
         }
         return new { data = new { items, page, pageSize = size, total }, meta = new { layer = layer.Name } };
+    }
+
+    public bool HasLayer(string layerName) => Layers.ContainsKey(layerName);
+
+    public bool IsApprovedColumn(string layerName, string column) =>
+        Layers.TryGetValue(layerName, out var layer) && layer.Attributes.Contains(column, StringComparer.OrdinalIgnoreCase);
+
+    public async Task<long> CountAsync(SearchCriteria criteria, CancellationToken cancellationToken)
+    {
+        var query = Build(criteria);
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new SqlCommand($"SELECT COUNT_BIG(*) FROM dbo.[{query.Layer.Table}] WHERE {query.Where}", connection);
+        foreach (var parameter in query.Parameters) command.Parameters.Add(parameter);
+        return (long)(await command.ExecuteScalarAsync(cancellationToken) ?? 0L);
+    }
+
+    /// <summary>Reads approved columns of the filtered rows, without geometry, in the same order the search uses.</summary>
+    public async IAsyncEnumerable<object?[]> ReadRowsAsync(SearchCriteria criteria, IReadOnlyList<string> columns, long offset, int take, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var query = Build(criteria);
+        var approved = columns.Select(column => query.Layer.Attributes.FirstOrDefault(x => x.Equals(column, StringComparison.OrdinalIgnoreCase)) ?? throw new ArgumentException($"Column '{column}' is not approved for this layer.")).ToArray();
+        var sql = $"SELECT {string.Join(",", approved.Select(x => $"[{x}]"))} FROM dbo.[{query.Layer.Table}] WHERE {query.Where} ORDER BY {query.OrderBy} OFFSET @offset ROWS FETCH NEXT @size ROWS ONLY";
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new SqlCommand(sql, connection);
+        foreach (var parameter in query.Parameters) command.Parameters.Add(parameter);
+        command.Parameters.Add("@offset", SqlDbType.BigInt).Value = offset;
+        command.Parameters.Add("@size", SqlDbType.Int).Value = take;
+        await using var reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var row = new object?[approved.Length];
+            for (var i = 0; i < approved.Length; i++) row[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+            yield return row;
+        }
+    }
+
+    internal static BuiltQuery Build(SearchCriteria criteria)
+    {
+        if (!Layers.TryGetValue(criteria.Layer, out var layer)) throw new KeyNotFoundException("The requested layer does not exist.");
+        var sort = string.IsNullOrWhiteSpace(criteria.SortBy) ? layer.Id : layer.Attributes.FirstOrDefault(x => x.Equals(criteria.SortBy, StringComparison.OrdinalIgnoreCase)) ?? throw new ArgumentException("sortBy is not an approved field.");
+        var sortDirection = criteria.SortDirection;
+        var direction = string.IsNullOrWhiteSpace(sortDirection) || sortDirection.Equals("asc", StringComparison.OrdinalIgnoreCase) ? "ASC" : sortDirection.Equals("desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : throw new ArgumentException("sortDirection must be asc or desc.");
+        var clauses = new List<string> { "Geom IS NOT NULL" };
+        var parameters = new List<SqlParameter>();
+        var q = criteria.Q;
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            clauses.Add("(" + string.Join(" OR ", layer.SearchFields.Select((field, i) => $"TRY_CONVERT(nvarchar(4000),[{field}]) LIKE @q{i}")) + ")");
+            foreach (var (field, i) in layer.SearchFields.Select((x, i) => (x, i))) parameters.Add(new SqlParameter($"@q{i}", SqlDbType.NVarChar, 4000) { Value = $"%{q.Trim()}%" });
+        }
+        foreach (var (key, value) in criteria.Filters)
+        {
+            if (string.IsNullOrWhiteSpace(value)) continue;
+            var field = layer.Attributes.FirstOrDefault(x => x.Equals(key, StringComparison.OrdinalIgnoreCase));
+            if (field is null) throw new ArgumentException($"Filter '{key}' is not approved for this layer.");
+            var parameterName = "@f" + parameters.Count;
+            var exactMatch = field.Equals("Estado", StringComparison.OrdinalIgnoreCase) || field.Equals("TipoVia", StringComparison.OrdinalIgnoreCase);
+            clauses.Add(exactMatch
+                ? $"TRY_CONVERT(nvarchar(4000),[{field}]) = {parameterName}"
+                : $"TRY_CONVERT(nvarchar(4000),[{field}]) LIKE {parameterName}");
+            parameters.Add(new SqlParameter(parameterName, SqlDbType.NVarChar, 4000) { Value = exactMatch ? value.Trim() : $"%{value.Trim()}%" });
+        }
+        var tieBreaker = sort.Equals(layer.Id, StringComparison.OrdinalIgnoreCase) ? "" : $", [{layer.Id}] ASC";
+        return new BuiltQuery(layer, string.Join(" AND ", clauses), $"[{sort}] {direction}{tieBreaker}", parameters);
     }
 
     private static object ToGeoJson(NetTopologySuite.Geometries.Geometry geometry)
@@ -102,5 +147,6 @@ public sealed class SearchQueryService(IConfiguration configuration)
         await connection.OpenAsync(token);
         return connection;
     }
-    private sealed record Definition(string Name, string Id, string[] Attributes, string[] SearchFields) { public string Table => Name; }
+    internal sealed record Definition(string Name, string Id, string[] Attributes, string[] SearchFields) { public string Table => Name; }
+    internal sealed record BuiltQuery(Definition Layer, string Where, string OrderBy, List<SqlParameter> Parameters);
 }
