@@ -60,9 +60,26 @@ public static class ReportQueryBuilder
         }
 
         var order = new List<string>();
-        if (report.GroupBy is { } group) order.Add($"[{group.Key}] ASC");
-        foreach (var sort in report.Sort.Where(s => s.Column != report.GroupBy)) order.Add($"[{sort.Column.Key}] {(sort.Descending ? "DESC" : "ASC")}");
-        if (!report.Sort.Any(s => s.Column.Key == layer.IdColumn)) order.Add($"[{layer.IdColumn}] ASC");
+        var seenOrderColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (report.GroupBy is { } group && seenOrderColumns.Add(group.Key))
+        {
+            order.Add($"[{group.Key}] ASC");
+        }
+
+        foreach (var sort in report.Sort)
+        {
+            if (seenOrderColumns.Add(sort.Column.Key))
+            {
+                order.Add($"[{sort.Column.Key}] {(sort.Descending ? "DESC" : "ASC")}");
+            }
+        }
+
+        if (seenOrderColumns.Add(layer.IdColumn))
+        {
+            order.Add($"[{layer.IdColumn}] ASC");
+        }
+
         return new(layer.Table, string.Join(" AND ", clauses), string.Join(", ", order), parameters);
     }
 
