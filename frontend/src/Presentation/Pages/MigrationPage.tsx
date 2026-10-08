@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import { CheckCircle2, ChevronDown, FileCheck2, FolderOpen, Play, X } from "lucide-react";
 import { useAuth } from "@/Presentation/Components/AuthProvider";
 import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
+import { InfoTooltip } from "@/Presentation/Components/ui/info-tooltip";
 import { Button } from "@/Presentation/Components/ui/button";
 import { executeMigration, simulateFixedCodeStates, validateMigration, type FixedCodeSimulationResult, type MigrationExecution, type MigrationMode, type MigrationValidation } from "@/Application/Services/migrations";
 
@@ -128,9 +129,12 @@ export function MigrationPage() {
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Seleccioná los componentes Shapefile de las capas aprobadas, validá el contenido y luego ejecutá la migración. Los archivos se envían a la API solo al validar o ejecutar; no se guardan en el navegador.</p>
 
           <section className="mt-8 rounded-xl border border-slate-200 bg-white p-5 sm:p-7" aria-labelledby="files-heading">
-            <h2 id="files-heading" className="text-lg font-semibold text-slate-900">
-              1. Archivos de origen
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 id="files-heading" className="text-lg font-semibold text-slate-900 m-0">
+                1. Archivos de origen
+              </h2>
+              <InfoTooltip text="Seleccioná los 4 archivos obligatorios (.shp, .shx, .dbf, .prj) correspondientes a cada capa que desees importar." />
+            </div>
             <p className="mt-2 text-sm text-slate-600">Por cada capa incluí los cuatro componentes requeridos: {components.join(", ")}.</p>
             <ul className="mt-3 grid gap-1 text-sm text-slate-700 sm:grid-cols-2">
               {approvedLayers.map((layer) => (
@@ -166,7 +170,10 @@ export function MigrationPage() {
           </section>
 
           <section className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-5 sm:p-7" aria-labelledby="simulation-heading">
-            <h2 id="simulation-heading" className="text-lg font-semibold text-slate-900">Simulación de estados (solo demostración)</h2>
+            <div className="flex items-center gap-2">
+              <h2 id="simulation-heading" className="text-lg font-semibold text-slate-900 m-0">Simulación de estados (solo demostración)</h2>
+              <InfoTooltip text="Asigna aleatoriamente estados del 1 al 5 a los códigos fijos para pruebas de demostración. Sobrescribe la base de datos." />
+            </div>
             <p className="mt-2 text-sm leading-6 text-slate-700">Genera estados simulados para todos los códigos fijos ya guardados, independientemente de los archivos seleccionados o validados. Sobrescribe irreversiblemente TODOS los estados existentes; no hay deshacer. No modifica archivos SHP.</p>
             <Button type="button" size="lg" className="mt-4 border border-amber-800 bg-amber-700 px-5 font-semibold text-white shadow-sm hover:border-amber-900 hover:bg-amber-800" onClick={openSimulationDialog} disabled={busy !== null}>
               {busy === "simulate" ? "Simulando…" : "Simular 5 estados de código fijo"}
@@ -194,9 +201,12 @@ export function MigrationPage() {
           </section>
 
           <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 sm:p-7" aria-labelledby="validation-heading">
-            <h2 id="validation-heading" className="text-lg font-semibold text-slate-900">
-              2. Validar y revisar
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 id="validation-heading" className="text-lg font-semibold text-slate-900 m-0">
+                2. Validar y revisar
+              </h2>
+              <InfoTooltip text="Comprueba la integridad de los archivos, atributos y proyección geográfica (CRS) antes de impactar en la base de datos." />
+            </div>
             <p className="mt-2 text-sm leading-6 text-slate-600">Se verifica el sistema de referencia de coordenadas (CRS) y, cuando corresponde, el servidor aplica la transformación aprobada. La validación no implica reparación de geometrías.</p>
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <Button size="lg" className="border border-blue-700 bg-blue-700 px-5 font-semibold text-white shadow-sm hover:border-blue-800 hover:bg-blue-800 focus-visible:ring-blue-500" onClick={() => void validate()} disabled={busy !== null || files.length === 0}>
@@ -255,11 +265,17 @@ export function MigrationPage() {
           </section>
 
           <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 sm:p-7" aria-labelledby="execute-heading">
-            <h2 id="execute-heading" className="text-lg font-semibold text-slate-900">
-              3. Ejecutar migración
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 id="execute-heading" className="text-lg font-semibold text-slate-900 m-0">
+                3. Ejecutar migración
+              </h2>
+              <InfoTooltip text="Transfiere de forma transaccional las capas validadas a las tablas oficiales de SQL Server." />
+            </div>
             <label className="mt-5 block text-sm font-medium text-slate-700">
-              Modo de carga
+              <span className="flex items-center gap-1.5">
+                Modo de carga
+                <InfoTooltip text="Reemplazar sobrescribe las capas seleccionadas; Agregar suma nuevos registros sin eliminar los anteriores." />
+              </span>
               <span className="relative mt-2 block">
                 <select className="block h-11 w-full cursor-pointer appearance-none rounded-md border border-slate-300 bg-white px-3 pr-10 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 [&>option]:cursor-pointer" value={mode} onChange={(event) => setMode(event.target.value as MigrationMode)} disabled={busy !== null}>
                   <option value="replace">Reemplazar datos existentes</option>
@@ -267,7 +283,6 @@ export function MigrationPage() {
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" size={17} aria-hidden="true" />
               </span>
-              <span className="mt-2 block text-xs font-normal leading-5 text-slate-500">Reemplazar sustituye solo las capas seleccionadas; las capas no seleccionadas permanecen. Para respetar las relaciones, puede desvincular referencias existentes a Manzanas o Lotes. Agregar permite cargar una o más capas sin borrar las existentes.</span>
             </label>
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <Button size="lg" className="border border-emerald-700 bg-emerald-600 px-5 font-semibold text-white shadow-sm hover:border-emerald-800 hover:bg-emerald-700 focus-visible:ring-emerald-500" onClick={() => void execute()} disabled={busy !== null || !validation?.valid}>

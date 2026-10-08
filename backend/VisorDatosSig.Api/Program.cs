@@ -269,6 +269,12 @@ app.MapGet("/api/layers/{layer}/{id:int}", async (string layer, int id, LayerQue
     catch (SqlException) { return Results.Problem(statusCode: 503, title: "Layer data unavailable", detail: "No se pudo consultar el elemento geográfico."); }
 }).RequireAuthorization();
 
+app.MapGet("/api/dashboard/summary", async (LayerQueryService query, CancellationToken cancellationToken) =>
+{
+    try { return Results.Ok(await query.DashboardSummaryAsync(cancellationToken)); }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Dashboard data unavailable", detail: "No se pudieron consultar los datos del dashboard."); }
+}).RequireAuthorization();
+
 app.MapReportExports();
 
 app.MapPost("/api/shapefile-sources/analyze", ([FromForm] IFormFileCollection files) =>

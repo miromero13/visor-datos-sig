@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import html2canvas from "html2canvas";
 import { Camera, Crosshair, Maximize, Printer, Plus, Minus, ChevronDown, MapPin, ExternalLink, X } from "lucide-react";
 import { Skeleton } from "@/Presentation/Components/ui/skeleton";
+import { InfoTooltip } from "@/Presentation/Components/ui/info-tooltip";
 import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
 import { getLayerExtent, getLayerFeatures, getAllFixedCodeFeatures, getLayerDetail, getLayers, searchLayer, type Extent, type Feature, type FeatureCollection, type Layer, type LayerId, type SearchResult } from "@/Application/Services/layers";
 import "leaflet/dist/leaflet.css";
@@ -758,7 +759,10 @@ export function MapPage() {
               </div>
               <div id="map-panel-search" role="tabpanel" aria-labelledby="map-tab-search" hidden={sidebarTab !== "search"}>
                 <section className="map-sidebar-section map-search-section" aria-labelledby="map-search-heading">
-                  <h2 id="map-search-heading">Buscar código fijo</h2>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <h2 id="map-search-heading" className="m-0">Buscar código fijo</h2>
+                    <InfoTooltip text="Filtrá puntos de suministro por estado operativo o nombre del titular." />
+                  </div>
                   <label htmlFor="fixed-state">Estado</label>
                   <span className="relative block">
                     <select id="fixed-state" className="block h-11 w-full cursor-pointer appearance-none rounded-lg border border-slate-300 bg-white px-3 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 [&>option]:cursor-pointer" value={fixedEstado} onChange={(event) => setFixedEstado(event.target.value)}>
@@ -840,7 +844,10 @@ export function MapPage() {
               </div>
               <div id="map-panel-layers" role="tabpanel" aria-labelledby="map-tab-layers" hidden={sidebarTab !== "layers"}>
                 <section className="map-sidebar-section border-b border-[#e2e8f0]" aria-labelledby="map-basemap-heading">
-                  <h2 id="map-basemap-heading">Mapa base</h2>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <h2 id="map-basemap-heading" className="m-0">Mapa base</h2>
+                    <InfoTooltip text="Seleccioná el estilo de cartografía de fondo (OpenStreetMap, satelital o claro)." />
+                  </div>
                   <label className="map-basemap-label" htmlFor="map-basemap">
                     Estilo de fondo
                   </label>
@@ -857,8 +864,10 @@ export function MapPage() {
                   </span>
                 </section>
                 <section className="map-sidebar-section " aria-labelledby="map-layers-heading">
-                  <h2 id="map-layers-heading">Capas visibles</h2>
-                  <p className="map-muted">Activá o desactivá información del mapa.</p>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <h2 id="map-layers-heading" className="m-0">Capas visibles</h2>
+                    <InfoTooltip text="Activá o desactivá capas vectoriales para superponerlas sobre el mapa base." />
+                  </div>
                   {loading ? (
                     <div role="status" aria-label="Cargando capas" className="space-y-3 pt-2">
                       {[1, 2, 3, 4].map((i) => (
@@ -887,8 +896,10 @@ export function MapPage() {
               </div>
               <div id="map-panel-legend" role="tabpanel" aria-labelledby="map-tab-legend" hidden={sidebarTab !== "legend"}>
                 <section className="map-legend map-sidebar-section" aria-labelledby="map-legend-heading">
-                  <h2 id="map-legend-heading">Leyenda de colores</h2>
-                  <p className="map-muted">Tocá un color para cambiarlo. Se guarda en este navegador.</p>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <h2 id="map-legend-heading" className="m-0">Leyenda de colores</h2>
+                    <InfoTooltip text="Tocá cualquier color para personalizar su visualización en este navegador." />
+                  </div>
                   {paletteStorageError && <p role="status">El color se aplicó, pero no se pudo guardar en este navegador.</p>}
                   {activeLayers.length === 0 && <p className="map-muted">Activá una capa en la pestaña Capas para ver sus colores.</p>}
                   {activeLayers.flatMap((layer) =>

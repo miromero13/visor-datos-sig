@@ -102,3 +102,66 @@ export async function getAllFixedCodeFeatures(filters: { estado?: number; nombre
 };
 export const getLayerDetail = (layer: LayerId, id: number, signal?: AbortSignal) => request<LayerDetail>(`/api/layers/${layer}/${id}`, signal);
 export const getLayerExtent = (layer: LayerId) => request<Extent>(`/api/layers/${layer}/extent`);
+
+export interface DashboardSummary {
+  data: {
+    totales: {
+      manzanas: number;
+      lotes: number;
+      codigosFijos: number;
+      vias: number;
+      totalEntidades: number;
+      operadoresActivos: number;
+    };
+    estados: Array<{
+      valor: number;
+      label: string;
+      cantidad: number;
+      color: string;
+    }>;
+  };
+}
+
+export const getDashboardSummary = (signal?: AbortSignal) => request<DashboardSummary>("/api/dashboard/summary", signal);
+
+export const MAP_PALETTE_STORAGE_KEY = "sig.map-colors.v1";
+export const DEFAULT_FIXED_STATE_COLORS: Record<number, string> = {
+  1: "#16a34a",
+  2: "#f97316",
+  3: "#dc2626",
+  4: "#8b5cf6",
+  5: "#6b7280",
+};
+
+export const DEFAULT_FIXED_STATE_LABELS: Record<number, string> = {
+  1: "Normal",
+  2: "Para corte",
+  3: "Cortado",
+  4: "Baja parcial",
+  5: "Baja total",
+};
+
+export const FIXED_STATE_OPTIONS = [
+  { value: 1, label: "Normal" },
+  { value: 2, label: "Para corte" },
+  { value: 3, label: "Cortado" },
+  { value: 4, label: "Baja parcial" },
+  { value: 5, label: "Baja total" },
+] as const;
+
+export function getFixedStateColor(stateValue: number): string {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MAP_PALETTE_STORAGE_KEY) ?? "null");
+    if (saved && typeof saved === "object" && !Array.isArray(saved)) {
+      const custom = saved[`state-${stateValue}`];
+      if (typeof custom === "string" && /^#[0-9a-f]{6}$/i.test(custom)) {
+        return custom;
+      }
+    }
+  } catch {
+    // Ignore localStorage parse errors
+  }
+  return DEFAULT_FIXED_STATE_COLORS[stateValue] ?? "#64748b";
+}
+
+

@@ -96,6 +96,72 @@ public sealed class LayerQueryService(IConfiguration configuration)
         return envelope is null || envelope.IsNull ? null : new { west = envelope.MinX, south = envelope.MinY, east = envelope.MaxX, north = envelope.MaxY, srid = 4326 };
     }
 
+    public async Task<object> DashboardSummaryAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        const string sql = @"
+            SELECT 
+                (SELECT COUNT_BIG(*) FROM dbo.[Manzanas]) AS TotalManzanas,
+                (SELECT COUNT_BIG(*) FROM dbo.[Lotes]) AS TotalLotes,
+                (SELECT COUNT_BIG(*) FROM dbo.[CodigosFijos]) AS TotalCodigosFijos,
+                (SELECT COUNT_BIG(*) FROM dbo.[Vias]) AS TotalVias,
+                (SELECT COUNT_BIG(*) FROM dbo.[Usuarios] WHERE Activo = 1) AS TotalOperadoresActivos;
+
+            SELECT ISNULL(Estado, 0) AS Estado, COUNT_BIG(*) AS Cantidad
+            FROM dbo.[CodigosFijos]
+            GROUP BY Estado;";
+
+        await using var command = new SqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        long manzanas = 0, lotes = 0, codigosFijos = 0, vias = 0, operadoresActivos = 0;
+        if (await reader.ReadAsync(cancellationToken))
+        {
+            manzanas = reader.IsDBNull(0) ? 0 : reader.GetInt64(0);
+            lotes = reader.IsDBNull(1) ? 0 : reader.GetInt64(1);
+            codigosFijos = reader.IsDBNull(2) ? 0 : reader.GetInt64(2);
+            vias = reader.IsDBNull(3) ? 0 : reader.GetInt64(3);
+            operadoresActivos = reader.IsDBNull(4) ? 0 : reader.GetInt64(4);
+        }
+
+        var estados = new Dictionary<int, long>();
+        if (await reader.NextResultAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var estadoVal = Convert.ToInt32(reader.GetValue(0));
+                var cant = reader.GetInt64(1);
+                estados[estadoVal] = cant;
+            }
+        }
+
+        var totalEntidades = manzanas + lotes + codigosFijos + vias;
+
+        return new
+        {
+            data = new
+            {
+                totales = new
+                {
+                    manzanas,
+                    lotes,
+                    codigosFijos,
+                    vias,
+                    totalEntidades,
+                    operadoresActivos
+                },
+                estados = new[]
+                {
+                    new { valor = 1, label = "Normal", cantidad = estados.GetValueOrDefault(1, 0), color = "#16a34a" },
+                    new { valor = 2, label = "Para corte", cantidad = estados.GetValueOrDefault(2, 0), color = "#f97316" },
+                    new { valor = 3, label = "Cortado", cantidad = estados.GetValueOrDefault(3, 0), color = "#dc2626" },
+                    new { valor = 4, label = "Baja parcial", cantidad = estados.GetValueOrDefault(4, 0), color = "#8b5cf6" },
+                    new { valor = 5, label = "Baja total", cantidad = estados.GetValueOrDefault(5, 0), color = "#6b7280" }
+                }
+            }
+        };
+    }
+
     private static object ToGeoJson(Geometry g)
     {
         object Coordinates(Coordinate c) => new[] { c.X, c.Y };

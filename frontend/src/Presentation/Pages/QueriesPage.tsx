@@ -2,9 +2,22 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, MapPin } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Skeleton } from "@/Presentation/Components/ui/skeleton";
+import { InfoTooltip } from "@/Presentation/Components/ui/info-tooltip";
 import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
 import { ExportMenu } from "@/Presentation/Components/ExportMenu";
-import { getLayers, getViaTypes, layerFields, searchAllLayers, searchLayer, type Layer, type LayerId, type SearchResult } from "@/Application/Services/layers";
+import {
+  getLayers,
+  getViaTypes,
+  layerFields,
+  searchAllLayers,
+  searchLayer,
+  FIXED_STATE_OPTIONS,
+  DEFAULT_FIXED_STATE_LABELS,
+  getFixedStateColor,
+  type Layer,
+  type LayerId,
+  type SearchResult,
+} from "@/Application/Services/layers";
 
 const allLayers = "all" as const;
 type LayerChoice = LayerId | typeof allLayers;
@@ -87,20 +100,32 @@ export function QueriesPage() {
   return (
     <AuthenticatedLayout activeItem="Consultas">
       <main className="queries-page">
-        <header className="queries-heading">
+        <header className="queries-heading flex items-center justify-between gap-4">
           <div className="flex flex-col gap-1">
             <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Consultas y filtros</h1>
             <p className="m-0 text-xs text-slate-500">Buscá entidades territoriales y consultá sus atributos en tiempo real.</p>
           </div>
+          <div className="shrink-0">
+            <ExportMenu
+              request={exportRequest}
+              disabledReason={layerId === allLayers ? "Elegí una capa para exportar sus resultados." : "No hay resultados para exportar."}
+              onError={setExportError}
+            />
+          </div>
         </header>
         <section className="search-panel" aria-label="Búsqueda de elementos">
-          <div className="border-b border-slate-100 pb-3">
-            <h2 className="text-sm font-semibold text-slate-900 tracking-tight">Filtros de búsqueda</h2>
-            <p className="m-0 text-xs text-slate-400">Seleccioná una capa e ingresá términos de búsqueda para filtrar la base de datos.</p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-slate-900 tracking-tight">Filtros de búsqueda</h2>
+              <InfoTooltip text="Seleccioná una capa e ingresá términos de búsqueda para filtrar la base de datos." />
+            </div>
           </div>
-          <div className="search-controls pt-1">
+          <div className="search-controls">
             <label>
-              Capa
+              <span className="flex items-center gap-1.5">
+                Capa
+                <InfoTooltip text="Elegí una capa específica o buscá simultáneamente en todo el catastro municipal." />
+              </span>
               <span className="relative block">
                 <select className="block h-9.5 w-full cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white px-3 pr-9 text-xs font-medium text-slate-800 shadow-2xs outline-none transition hover:border-slate-300 focus:border-blue-600 focus:ring-3 focus:ring-blue-600/15 [&>option]:cursor-pointer" value={layerId} onChange={(e) => chooseLayer(e.target.value as LayerChoice)} aria-label="Capa de búsqueda">
                   <option value={allLayers}>Todas las capas</option>
@@ -114,7 +139,10 @@ export function QueriesPage() {
               </span>
             </label>
             <label className="search-query">
-              Buscar por código, nombre, lote o vía
+              <span className="flex items-center gap-1.5">
+                Buscar por código, nombre, lote o vía
+                <InfoTooltip text="Búsqueda por coincidencia de texto en identificadores, propietarios o direcciones." />
+              </span>
               <input
                 className="h-9.5 rounded-lg border border-slate-200 bg-white px-3 text-xs shadow-2xs outline-none transition hover:border-slate-300 focus:border-blue-600 focus:ring-3 focus:ring-blue-600/15"
                 value={query}
@@ -131,10 +159,10 @@ export function QueriesPage() {
                 {field === "Estado" ? (
                   <span className="relative block">
                     <select className="block h-9.5 w-full cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white px-3 pr-9 text-xs font-medium text-slate-800 shadow-2xs outline-none transition hover:border-slate-300 focus:border-blue-600 focus:ring-3 focus:ring-blue-600/15 [&>option]:cursor-pointer" value={filters[field] ?? ""} onChange={(e) => updateFilter(field, e.target.value)}>
-                      <option value="">Todos</option>
-                      {[1, 2, 3, 4, 5].map((value) => (
-                        <option key={value} value={value}>
-                          {value}
+                      <option value="">Todos los estados</option>
+                      {FIXED_STATE_OPTIONS.map((state) => (
+                        <option key={state.value} value={state.value}>
+                          {state.label}
                         </option>
                       ))}
                     </select>
@@ -227,7 +255,12 @@ export function QueriesPage() {
                           {layerId === allLayers && <th>Capa</th>}
                           <th>ID</th>
                           {layerId === allLayers ? <th>Atributos</th> : fields.map((field) => <th key={field}>{field}</th>)}
-                          <th className="text-right">Acción</th>
+                          <th className="text-right">
+                            <span className="inline-flex items-center gap-1">
+                              Acción
+                              <InfoTooltip side="left" text="Navegá directamente a la posición geográfica de la entidad en el visor interactivo." />
+                            </span>
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -251,16 +284,52 @@ export function QueriesPage() {
                               {layerId === allLayers ? (
                                 <td className="text-slate-600">
                                   {displayFields
-                                    .map((field) => (item.properties[field] == null ? "" : `${field}: ${String(item.properties[field])}`))
+                                    .map((field) => {
+                                      const val = item.properties[field];
+                                      if (val == null) return "";
+                                      if (field === "Estado" && itemLayer === "CodigosFijos") {
+                                        const num = Number(val);
+                                        return `Estado: ${DEFAULT_FIXED_STATE_LABELS[num] ?? num}`;
+                                      }
+                                      return `${field}: ${String(val)}`;
+                                    })
                                     .filter(Boolean)
                                     .join(" · ") || "—"}
                                 </td>
                               ) : (
-                                displayFields.map((field) => (
-                                  <td key={field} className="text-slate-700">
-                                    {item.properties[field] == null ? "—" : String(item.properties[field])}
-                                  </td>
-                                ))
+                                displayFields.map((field) => {
+                                  const val = item.properties[field];
+                                  if (val == null) return <td key={field} className="text-slate-400">—</td>;
+                                  if (field === "Estado" && itemLayer === "CodigosFijos") {
+                                    const num = Number(val);
+                                    const label = DEFAULT_FIXED_STATE_LABELS[num] ?? `Estado ${num}`;
+                                    const color = getFixedStateColor(num);
+                                    return (
+                                      <td key={field}>
+                                        <span
+                                          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wide border"
+                                          style={{
+                                            backgroundColor: `${color}15`,
+                                            borderColor: `${color}35`,
+                                            color: color,
+                                          }}
+                                        >
+                                          <span
+                                            className="size-1.5 rounded-full"
+                                            style={{ backgroundColor: color }}
+                                            aria-hidden="true"
+                                          />
+                                          {label}
+                                        </span>
+                                      </td>
+                                    );
+                                  }
+                                  return (
+                                    <td key={field} className="text-slate-700">
+                                      {String(val)}
+                                    </td>
+                                  );
+                                })
                               )}
                               <td className="text-right">
                                 <button className="query-map-link ml-auto" type="button" onClick={() => openOnMap(item)}>
@@ -276,12 +345,9 @@ export function QueriesPage() {
                   </div>
 
                   <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
-                    <div className="flex items-center gap-4">
-                      <p className="m-0 text-xs font-medium text-slate-500">
-                        <span className="font-semibold text-slate-900">{total.toLocaleString("es-AR")}</span> resultados encontrados
-                      </p>
-                      <ExportMenu request={exportRequest} disabledReason={layerId === allLayers ? "Elegí una capa para exportar sus resultados." : "No hay resultados para exportar."} onError={setExportError} />
-                    </div>
+                    <p className="m-0 text-xs font-medium text-slate-500">
+                      <span className="font-semibold text-slate-900">{total.toLocaleString("es-AR")}</span> resultados encontrados
+                    </p>
 
                     <nav className="flex items-center gap-2" aria-label="Paginación de resultados">
                       <button type="button" className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:pointer-events-none disabled:opacity-40" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)}>

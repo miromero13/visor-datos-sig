@@ -6,7 +6,6 @@ import {
   Map,
   Search,
   UsersRound,
-  Crosshair,
   ChevronRight,
   Menu,
   X,
@@ -24,7 +23,6 @@ const navigation = [
   { label: "Inicio", icon: House, href: "/dashboard" },
   { label: "Visor de mapa", icon: Map, href: "/map" },
   { label: "Consultas", icon: Search, href: "/queries" },
-  { label: "Identificación", icon: Crosshair, href: "#" },
   { label: "Administración", icon: UsersRound, href: "#" },
   { label: "Migración", icon: Map, href: "/migration" },
 ] as const;
