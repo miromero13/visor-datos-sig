@@ -20,10 +20,19 @@ public enum ExportScope { Page, All }
 public enum ReportOrientation { Portrait, Landscape }
 public enum ColumnKind { Text, Integer, Decimal, Coordinate, Currency, Date }
 
-/// <summary>Display metadata for an approved column. <see cref="Convert"/> turns the raw SQL value into the value written to the file.</summary>
-public sealed record ExportColumn(string Key, string Label, ColumnKind Kind, bool Summable = false, Func<object?, object?>? Map = null)
+public sealed record FieldOption(string Value, string Label);
+
+/// <summary>
+/// Display metadata for an approved column. <see cref="Convert"/> turns the raw SQL value into the value written to the file.
+/// <see cref="FilterKind"/> is the stored type used to filter (Estado is stored as a number but shown as a label);
+/// <see cref="ReportOnly"/> columns are available in custom reports but not on the search screen.
+/// </summary>
+public sealed record ExportColumn(string Key, string Label, ColumnKind Kind, bool Summable = false, Func<object?, object?>? Map = null,
+    ColumnKind? FilterAs = null, IReadOnlyList<FieldOption>? Options = null, bool ReportOnly = false)
 {
     public object? Convert(object? raw) => raw is null ? null : Map is null ? raw : Map(raw);
+    public ColumnKind FilterKind => FilterAs ?? Kind;
+    public bool Groupable => Kind is ColumnKind.Text or ColumnKind.Integer;
 }
 
 public sealed record ReportParameter(string Name, string Value);
@@ -38,7 +47,8 @@ public sealed record ReportDocument(
     DateTime GeneratedAt,
     string GeneratedBy,
     ReportOrientation Orientation,
-    bool IncludeParametersSheet);
+    bool IncludeParametersSheet,
+    int? GroupColumnIndex = null);
 
 public sealed record ExportFile(byte[] Content, string ContentType, string FileName);
 

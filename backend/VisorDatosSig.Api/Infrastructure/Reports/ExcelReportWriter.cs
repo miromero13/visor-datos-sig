@@ -10,6 +10,7 @@ public sealed class ExcelReportWriter : IReportWriter
     private const double MaxColumnWidth = 60;
     private static readonly XLColor HeaderFill = XLColor.FromHtml("#0F172A");
     private static readonly XLColor TotalsFill = XLColor.FromHtml("#E2E8F0");
+    private static readonly XLColor SubtotalFill = XLColor.FromHtml("#F1F5F9");
 
     public ExportFormat Format => ExportFormat.Xlsx;
     public string ContentType => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -44,16 +45,30 @@ public sealed class ExcelReportWriter : IReportWriter
             .Alignment.SetVertical(XLAlignmentVerticalValues.Center);
         sheet.Row(headerRow).Height = 20;
 
-        for (var r = 0; r < document.Rows.Count; r++)
+        var rowNumber = headerRow + 1;
+        var groups = ReportGrouping.Groups(document);
+        if (groups.Count == 0)
         {
-            var row = document.Rows[r];
-            for (var c = 0; c < document.Columns.Count; c++) SetValue(sheet.Cell(headerRow + 1 + r, c + 1), document.Columns[c], row[c]);
+            for (var r = 0; r < document.Rows.Count; r++) WriteRow(sheet, document, r, rowNumber++);
+        }
+        else
+        {
+            var groupLabel = document.Columns[document.GroupColumnIndex!.Value].Label;
+            foreach (var group in groups)
+            {
+                var first = rowNumber;
+                for (var r = group.Start; r < group.Start + group.Count; r++) WriteRow(sheet, document, r, rowNumber++);
+                sheet.Rows(first, rowNumber - 1).Group(); // Excel outline: each group collapses to its subtotal row.
+                WriteSummary(sheet, document, rowNumber++, $"Subtotal {groupLabel} {group.Label}: {group.Count:N0} registros", group.Start, group.Count, SubtotalFill);
+            }
+            sheet.Outline.SummaryVLocation = XLOutlineSummaryVLocation.Bottom;
         }
 
-        var lastDataRow = headerRow + document.Rows.Count;
+        var lastDataRow = rowNumber - 1;
         if (document.Columns.Count > 0) sheet.Range(headerRow, 1, lastDataRow, columnCount).SetAutoFilter();
         sheet.SheetView.FreezeRows(headerRow);
-        WriteTotals(sheet, document, lastDataRow + 1);
+        if (document.Columns.Count > 0)
+            WriteSummary(sheet, document, rowNumber, document.Rows.Count == 0 ? "Sin resultados para los filtros aplicados" : $"Total: {document.Rows.Count:N0} registros", 0, document.Rows.Count, TotalsFill);
 
         for (var c = 1; c <= columnCount; c++)
         {
@@ -63,20 +78,25 @@ public sealed class ExcelReportWriter : IReportWriter
         }
     }
 
-    private static void WriteTotals(IXLWorksheet sheet, ReportDocument document, int rowNumber)
+    private static void WriteRow(IXLWorksheet sheet, ReportDocument document, int index, int rowNumber)
     {
-        if (document.Columns.Count == 0) return;
-        sheet.Cell(rowNumber, 1).Value = document.Rows.Count == 0 ? "Sin resultados para los filtros aplicados" : $"Total: {document.Rows.Count:N0} registros";
-        for (var c = 0; c < document.Columns.Count; c++)
+        var row = document.Rows[index];
+        for (var c = 0; c < document.Columns.Count; c++) SetValue(sheet.Cell(rowNumber, c + 1), document.Columns[c], row[c]);
+    }
+
+    /// <summary>Subtotal or total row: a label in the first cell plus the sum of each summable column over the row range.</summary>
+    private static void WriteSummary(IXLWorksheet sheet, ReportDocument document, int rowNumber, string label, int start, int count, XLColor fill)
+    {
+        sheet.Cell(rowNumber, 1).Value = CellSanitizer.Sanitize(label);
+        for (var c = 1; c < document.Columns.Count; c++)
         {
             var column = document.Columns[c];
-            if (!column.Summable || c == 0) continue;
-            var sum = document.Rows.Sum(r => r[c] is not null && TryDecimal(r[c]!, out var n) ? n : 0m);
+            if (!column.Summable) continue;
             var cell = sheet.Cell(rowNumber, c + 1);
-            cell.Value = sum;
+            cell.Value = ReportGrouping.Sum(document.Rows, c, start, count);
             cell.Style.NumberFormat.Format = NumberFormat(column.Kind);
         }
-        sheet.Range(rowNumber, 1, rowNumber, document.Columns.Count).Style.Font.SetBold().Fill.SetBackgroundColor(TotalsFill);
+        sheet.Range(rowNumber, 1, rowNumber, document.Columns.Count).Style.Font.SetBold().Fill.SetBackgroundColor(fill);
     }
 
     private static void SetValue(IXLCell cell, ExportColumn column, object? value)

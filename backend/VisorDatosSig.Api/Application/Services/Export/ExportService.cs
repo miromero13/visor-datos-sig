@@ -52,7 +52,7 @@ public sealed class ExportService(IExportRowSource source, IEnumerable<IReportWr
             }
         }
 
-        var now = LocalNow();
+        var now = LocalNow(clock, configuration);
         var parameters = new List<ReportParameter>
         {
             new("Capa", layerTitle),
@@ -81,7 +81,8 @@ public sealed class ExportService(IExportRowSource source, IEnumerable<IReportWr
     public static string FileName(string slug, DateTime localTime, string extension) =>
         $"reporte_{slug}_{localTime:yyyy-MM-dd_HHmm}.{extension}";
 
-    private DateTime LocalNow()
+    /// <summary>Report timestamps use the configured local time zone (Bolivia by default, UTC-4 without daylight saving).</summary>
+    public static DateTime LocalNow(TimeProvider clock, IConfiguration configuration)
     {
         var utc = clock.GetUtcNow();
         var zoneId = configuration["Reports:TimeZone"] ?? "America/La_Paz";

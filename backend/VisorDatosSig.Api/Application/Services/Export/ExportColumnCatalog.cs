@@ -15,45 +15,49 @@ public static class ExportColumnCatalog
         return FixedCodeStates.TryGetValue(code, out var label) ? label : code.ToString();
     }
 
-    private sealed record LayerInfo(string Title, string Slug, IReadOnlyList<ExportColumn> Columns);
+    private static readonly IReadOnlyList<FieldOption> StateOptions = FixedCodeStates.Select(s => new FieldOption(s.Key.ToString(), s.Value)).ToArray();
+
+    /// <summary>Table and identifier are fixed per layer and never come from the request.</summary>
+    public sealed record LayerInfo(string Key, string Title, string Slug, string Table, string IdColumn, IReadOnlyList<ExportColumn> Columns, IReadOnlyList<string> SearchFields);
 
     private static readonly IReadOnlyDictionary<string, LayerInfo> Layers = new Dictionary<string, LayerInfo>(StringComparer.OrdinalIgnoreCase)
     {
-        ["CodigosFijos"] = new("Códigos fijos", "codigos_fijos",
+        ["CodigosFijos"] = new("CodigosFijos", "Códigos fijos", "codigos_fijos", "CodigosFijos", "IdCodigo",
         [
             new("IdCodigo", "ID", ColumnKind.Integer),
             new("CodF_SQL", "Código SQL", ColumnKind.Integer),
             new("CodF_SIG", "Código SIG", ColumnKind.Text),
             new("CodFijo", "Código fijo", ColumnKind.Integer),
             new("Nombre", "Nombre", ColumnKind.Text),
-            new("Estado", "Estado", ColumnKind.Text, Map: StateLabel),
+            new("Estado", "Estado", ColumnKind.Text, Map: StateLabel, FilterAs: ColumnKind.Integer, Options: StateOptions),
+            new("FechaCambioEstado", "Fecha de cambio de estado", ColumnKind.Date, ReportOnly: true),
             new("IdLote", "Lote (ID)", ColumnKind.Integer),
             new("Longitud", "Longitud", ColumnKind.Coordinate),
             new("Latitud", "Latitud", ColumnKind.Coordinate)
-        ]),
-        ["Lotes"] = new("Lotes", "lotes",
+        ], ["CodF_SQL", "CodF_SIG", "CodFijo", "Nombre"]),
+        ["Lotes"] = new("Lotes", "Lotes", "lotes", "Lotes", "IdLote",
         [
             new("IdLote", "ID", ColumnKind.Integer),
             new("IdOrigen", "ID origen", ColumnKind.Integer),
             new("NroLote", "Nro. de lote", ColumnKind.Text),
             new("IdManzana", "Manzana (ID)", ColumnKind.Integer)
-        ]),
-        ["Manzanas"] = new("Manzanas", "manzanas",
+        ], ["NroLote"]),
+        ["Manzanas"] = new("Manzanas", "Manzanas", "manzanas", "Manzanas", "IdManzana",
         [
             new("IdManzana", "ID", ColumnKind.Integer),
             new("IdOrigen", "ID origen", ColumnKind.Integer),
             new("UV_MZA", "UV-MZA", ColumnKind.Text),
             new("UV", "UV", ColumnKind.Text),
             new("MZA", "Manzana", ColumnKind.Text)
-        ]),
-        ["Vias"] = new("Vías", "vias",
+        ], ["UV", "MZA"]),
+        ["Vias"] = new("Vias", "Vías", "vias", "Vias", "IdVia",
         [
             new("IdVia", "ID", ColumnKind.Integer),
             new("OBJECTID", "Object ID", ColumnKind.Integer),
             new("Nombre", "Nombre", ColumnKind.Text),
             new("TipoVia", "Tipo de vía", ColumnKind.Text),
             new("OSMID", "OSM ID", ColumnKind.Text)
-        ])
+        ], ["Nombre", "TipoVia", "OSMID"])
     };
 
     public static bool TryGetLayer(string layer, out string title, out string slug)
@@ -68,7 +72,11 @@ public static class ExportColumnCatalog
         Layers.TryGetValue(layer, out var info) ? info.Columns.FirstOrDefault(c => c.Key.Equals(key, StringComparison.OrdinalIgnoreCase)) : null;
 
     public static IReadOnlyList<ExportColumn> DefaultColumns(string layer) =>
-        Layers.TryGetValue(layer, out var info) ? info.Columns : [];
+        Layers.TryGetValue(layer, out var info) ? info.Columns.Where(c => !c.ReportOnly).ToList() : [];
+
+    public static LayerInfo? Layer(string layer) => Layers.TryGetValue(layer, out var info) ? info : null;
+
+    public static IEnumerable<LayerInfo> AllLayers => Layers.Values;
 
     public static string FilterValueLabel(string layer, string key, string value)
     {
