@@ -21,7 +21,8 @@ internal sealed class HeaderAuthHandler(IOptionsMonitor<AuthenticationSchemeOpti
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         if (!Request.Headers.TryGetValue("X-Test-User", out var name)) return Task.FromResult(AuthenticateResult.NoResult());
-        var identity = new ClaimsIdentity([new Claim("display_name", name.ToString()), new Claim(ClaimTypes.Role, "Consultor")], Scheme);
+        var userId = Request.Headers.TryGetValue("X-Test-UserId", out var id) ? id.ToString() : "1";
+        var identity = new ClaimsIdentity([new Claim("sub", userId), new Claim("display_name", Uri.UnescapeDataString(name.ToString())), new Claim(ClaimTypes.Role, "Consultor")], Scheme);
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme)));
     }
 }

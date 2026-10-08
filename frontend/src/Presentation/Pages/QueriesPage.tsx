@@ -5,19 +5,8 @@ import { Skeleton } from "@/Presentation/Components/ui/skeleton";
 import { InfoTooltip } from "@/Presentation/Components/ui/info-tooltip";
 import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
 import { ExportMenu } from "@/Presentation/Components/ExportMenu";
-import {
-  getLayers,
-  getViaTypes,
-  layerFields,
-  searchAllLayers,
-  searchLayer,
-  FIXED_STATE_OPTIONS,
-  DEFAULT_FIXED_STATE_LABELS,
-  getFixedStateColor,
-  type Layer,
-  type LayerId,
-  type SearchResult,
-} from "@/Application/Services/layers";
+import { ReportBuilderDialog } from "@/Presentation/Components/Reports/ReportBuilderDialog";
+import { getLayers, getViaTypes, layerFields, searchAllLayers, searchLayer, FIXED_STATE_OPTIONS, DEFAULT_FIXED_STATE_LABELS, getFixedStateColor, type Layer, type LayerId, type SearchResult } from "@/Application/Services/layers";
 
 const allLayers = "all" as const;
 type LayerChoice = LayerId | typeof allLayers;
@@ -45,6 +34,7 @@ export function QueriesPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [exportError, setExportError] = useState("");
+  const [builderOpen, setBuilderOpen] = useState(false);
   const requestId = useRef(0);
   const navigate = useNavigate();
   const fields = layerId === allLayers ? [] : layerFields[layerId];
@@ -106,11 +96,7 @@ export function QueriesPage() {
             <p className="m-0 text-xs text-slate-500">Buscá entidades territoriales y consultá sus atributos en tiempo real.</p>
           </div>
           <div className="shrink-0">
-            <ExportMenu
-              request={exportRequest}
-              disabledReason={layerId === allLayers ? "Elegí una capa para exportar sus resultados." : "No hay resultados para exportar."}
-              onError={setExportError}
-            />
+            <ExportMenu request={exportRequest} disabledReason={layerId === allLayers ? "Elegí una capa para exportar sus resultados." : "No hay resultados para exportar."} onError={setExportError} onCustomReport={() => setBuilderOpen(true)} />
           </div>
         </header>
         <section className="search-panel" aria-label="Búsqueda de elementos">
@@ -299,7 +285,12 @@ export function QueriesPage() {
                               ) : (
                                 displayFields.map((field) => {
                                   const val = item.properties[field];
-                                  if (val == null) return <td key={field} className="text-slate-400">—</td>;
+                                  if (val == null)
+                                    return (
+                                      <td key={field} className="text-slate-400">
+                                        —
+                                      </td>
+                                    );
                                   if (field === "Estado" && itemLayer === "CodigosFijos") {
                                     const num = Number(val);
                                     const label = DEFAULT_FIXED_STATE_LABELS[num] ?? `Estado ${num}`;
@@ -314,11 +305,7 @@ export function QueriesPage() {
                                             color: color,
                                           }}
                                         >
-                                          <span
-                                            className="size-1.5 rounded-full"
-                                            style={{ backgroundColor: color }}
-                                            aria-hidden="true"
-                                          />
+                                          <span className="size-1.5 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
                                           {label}
                                         </span>
                                       </td>
@@ -366,6 +353,15 @@ export function QueriesPage() {
             </>
           )}
         </section>
+        <ReportBuilderDialog
+          open={builderOpen}
+          onOpenChange={setBuilderOpen}
+          initial={{
+            layer: layerId === allLayers ? undefined : layerId,
+            q: query,
+            filters,
+          }}
+        />
       </main>
     </AuthenticatedLayout>
   );

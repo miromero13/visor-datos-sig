@@ -15,6 +15,7 @@ import {
 import { Link } from "react-router-dom";
 import { Brand } from "@/Presentation/Components/Brand";
 import { useAuth } from "@/Presentation/Components/AuthProvider";
+import { ReportJobsNotice } from "@/Presentation/Components/Reports/ReportJobsNotice";
 
 type NavigationKey = "Inicio" | "Visor de mapa" | "Consultas" | "Identificación" | "Administración" | "Migración";
 type AuthenticatedLayoutProps = { children: ReactNode; activeItem: NavigationKey };
@@ -217,6 +218,7 @@ export function AuthenticatedLayout({ children, activeItem }: AuthenticatedLayou
           {children}
         </div>
       </div>
+      <ReportJobsNotice />
     </div>
   );
 }

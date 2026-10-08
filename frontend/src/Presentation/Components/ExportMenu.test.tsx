@@ -56,4 +56,14 @@ describe("ExportMenu", () => {
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("title", "Elegí una capa para exportar sus resultados.");
   });
+
+  it("opens the custom report builder even when quick exports are unavailable", async () => {
+    const onCustomReport = vi.fn();
+    render(<ExportMenu request={null} disabledReason="Elegí una capa para exportar sus resultados." onError={vi.fn()} onCustomReport={onCustomReport} />);
+    await userEvent.click(screen.getByRole("button", { name: /exportar/i }));
+    expect(await screen.findByRole("menuitem", { name: /página actual en excel/i })).toHaveAttribute("data-disabled");
+    expect(screen.getByText("Elegí una capa para exportar sus resultados.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("menuitem", { name: /reporte personalizado/i }));
+    expect(onCustomReport).toHaveBeenCalled();
+  });
 });

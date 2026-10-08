@@ -14,7 +14,8 @@ public sealed class DatabaseScriptRunner(IConfiguration configuration)
         "05_Optimizar_Relacion_CodigoFijo_Lote.sql",
         "06_Agregar_Nombre_Vias.sql",
         "07_Roles_Usuarios_Menu.sql",
-        "08_MenuOpciones_UsuarioMenu.sql"
+        "08_MenuOpciones_UsuarioMenu.sql",
+        "09_PlantillasReporte.sql"
     ];
 
     private static readonly Regex GoLine = new(@"^\s*GO\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);

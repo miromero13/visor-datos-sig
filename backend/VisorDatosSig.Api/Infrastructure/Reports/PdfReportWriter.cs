@@ -88,27 +88,42 @@ public sealed class PdfReportWriter : IReportWriter
                         header.Cell().Background(Ink).PaddingVertical(5).PaddingHorizontal(4).Element(cell => Align(cell, c))
                             .Text(c.Label).Bold().FontColor(Colors.White);
                 });
-                for (var r = 0; r < document.Rows.Count; r++)
+                void Rows(int start, int count)
                 {
-                    var background = r % 2 == 1 ? Stripe : "#FFFFFF";
-                    for (var c = 0; c < document.Columns.Count; c++)
-                        table.Cell().Background(background).BorderBottom(0.5f).BorderColor(Rule).ShowEntire()
-                            .PaddingVertical(3).PaddingHorizontal(4).Element(cell => Align(cell, document.Columns[c]))
-                            .Text(FormatValue(document.Columns[c], document.Rows[r][c]));
+                    for (var r = start; r < start + count; r++)
+                    {
+                        var background = (r - start) % 2 == 1 ? Stripe : "#FFFFFF";
+                        for (var c = 0; c < document.Columns.Count; c++)
+                            table.Cell().Background(background).BorderBottom(0.5f).BorderColor(Rule).ShowEntire()
+                                .PaddingVertical(3).PaddingHorizontal(4).Element(cell => Align(cell, document.Columns[c]))
+                                .Text(FormatValue(document.Columns[c], document.Rows[r][c]));
+                    }
+                }
+                var groups = ReportGrouping.Groups(document);
+                if (groups.Count == 0) Rows(0, document.Rows.Count);
+                var groupLabel = document.GroupColumnIndex is { } index ? document.Columns[index].Label : "";
+                foreach (var group in groups)
+                {
+                    table.Cell().ColumnSpan((uint)document.Columns.Count).ShowEntire().PaddingTop(6).Background("#E2E8F0").PaddingVertical(4).PaddingHorizontal(4)
+                        .Text($"{groupLabel}: {group.Label}").Bold();
+                    Rows(group.Start, group.Count);
+                    table.Cell().ColumnSpan((uint)document.Columns.Count).ShowEntire().Background(Stripe).PaddingVertical(4).PaddingHorizontal(4)
+                        .Text(text => Summary(text, document, $"Subtotal {group.Label}: {group.Count.ToString("N0", Culture)} registros", group.Start, group.Count));
                 }
             });
-            column.Item().ShowEntire().PaddingTop(8).Background("#E2E8F0").Padding(6).Text(text =>
-            {
-                text.Span($"Total: {document.Rows.Count.ToString("N0", Culture)} registros").Bold();
-                for (var c = 0; c < document.Columns.Count; c++)
-                {
-                    var col = document.Columns[c];
-                    if (!col.Summable) continue;
-                    var sum = document.Rows.Sum(row => row[c] is not null && TryDecimal(row[c]!, out var n) ? n : 0m);
-                    text.Span($"   ·   {col.Label}: {FormatValue(col, sum)}");
-                }
-            });
+            column.Item().ShowEntire().PaddingTop(8).Background("#E2E8F0").Padding(6)
+                .Text(text => Summary(text, document, $"Total: {document.Rows.Count.ToString("N0", Culture)} registros", 0, document.Rows.Count));
         });
+    }
+
+    private static void Summary(TextDescriptor text, ReportDocument document, string label, int start, int count)
+    {
+        text.Span(label).Bold();
+        for (var c = 0; c < document.Columns.Count; c++)
+        {
+            var column = document.Columns[c];
+            if (column.Summable) text.Span($"   ·   {column.Label}: {FormatValue(column, ReportGrouping.Sum(document.Rows, c, start, count))}");
+        }
     }
 
     private static IContainer Align(IContainer cell, ExportColumn column) =>

@@ -36,7 +36,7 @@ builder.Services.AddScoped<ShapefileMigrationService>();
 builder.Services.AddScoped<CodigoFijoSimulationService>();
 builder.Services.AddScoped<LayerQueryService>();
 builder.Services.AddScoped<SearchQueryService>();
-builder.Services.AddReportExports();
+builder.Services.AddCustomReports();
 var tokenService = new JwtTokenService(builder.Configuration, sessionRegistry);
 builder.Services.AddSingleton(tokenService);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
@@ -276,6 +276,7 @@ app.MapGet("/api/dashboard/summary", async (LayerQueryService query, Cancellatio
 }).RequireAuthorization();
 
 app.MapReportExports();
+app.MapCustomReports();
 
 app.MapPost("/api/shapefile-sources/analyze", ([FromForm] IFormFileCollection files) =>
 {
