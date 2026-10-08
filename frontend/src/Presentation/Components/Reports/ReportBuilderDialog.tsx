@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog } from "radix-ui";
-import { Columns3, Download, Eye, Filter, LoaderCircle, RotateCcw, Save, Settings2, SlidersHorizontal, X } from "lucide-react";
+import { ChevronDown, Columns3, Download, Eye, Filter, LoaderCircle, RotateCcw, Save, Settings2, SlidersHorizontal, X } from "lucide-react";
 import type { LayerId } from "@/Application/Services/layers";
 import { saveFile } from "@/Application/Services/exports";
 import {
@@ -166,10 +166,20 @@ export function ReportBuilderDialog({ open, onOpenChange, initial }: Props) {
 
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[230px_minmax(0,1fr)] md:grid-rows-1">
           <aside className="flex min-w-0 flex-col gap-3 border-b border-slate-200 bg-slate-50 p-3 md:min-h-0 md:gap-4 md:overflow-y-auto md:border-b-0 md:border-r md:p-4">
-            <label className="grid gap-1.5 text-xs font-medium text-slate-600">Capa
-              <select className={fieldClass} value={definition?.layer ?? ""} onChange={e => chooseLayer(e.target.value as LayerId)} disabled={!layers.length} aria-label="Capa del reporte">
-                {layers.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
-              </select>
+            <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+              <span>Capa</span>
+              <span className="relative block">
+                <select
+                  className="block h-9.5 w-full cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white px-3 pr-9 text-xs font-medium text-slate-800 shadow-2xs outline-none transition hover:border-slate-300 focus:border-blue-600 focus:ring-3 focus:ring-blue-600/15 disabled:bg-slate-50 disabled:text-slate-400 [&>option]:cursor-pointer"
+                  value={definition?.layer ?? ""}
+                  onChange={e => chooseLayer(e.target.value as LayerId)}
+                  disabled={!layers.length}
+                  aria-label="Capa del reporte"
+                >
+                  {layers.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} aria-hidden="true" />
+              </span>
             </label>
             <nav aria-label="Pasos del reporte" className="flex gap-1 overflow-x-auto md:grid">
               {steps.map(({ id, label, icon: Icon }) => <button key={id} type="button" onClick={() => setStep(id)} aria-current={step === id ? "step" : undefined}

@@ -1,4 +1,4 @@
-import { Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import type { ReportField, ReportSort } from "@/Application/Services/reports";
 import { fieldClass, hintClass, iconButton, labelClass, secondaryButton, sectionTitle } from "./reportStyles";
 
@@ -13,11 +13,19 @@ export function ReportOrderStep({ fields, groupBy, sort, onGroupChange, onSortCh
   return <div className="grid gap-6">
     <div className="grid gap-3">
       <div><h3 className={sectionTitle}>Agrupar</h3><p className={hintClass}>Cada grupo muestra sus registros y una fila de subtotal con la cantidad.</p></div>
-      <label className={`${labelClass} max-w-sm`}>Agrupar por
-        <select className={fieldClass} value={groupBy ?? ""} onChange={e => onGroupChange(e.target.value || null)}>
-          <option value="">Sin agrupar</option>
-          {groupable.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
-        </select>
+      <label className="grid gap-1.5 text-xs font-semibold text-slate-700 max-w-sm">
+        <span>Agrupar por</span>
+        <span className="relative block">
+          <select
+            className="block h-9.5 w-full cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white px-3 pr-9 text-xs font-medium text-slate-800 shadow-2xs outline-none transition hover:border-slate-300 focus:border-blue-600 focus:ring-3 focus:ring-blue-600/15 [&>option]:cursor-pointer"
+            value={groupBy ?? ""}
+            onChange={e => onGroupChange(e.target.value || null)}
+          >
+            <option value="">Sin agrupar</option>
+            {groupable.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} aria-hidden="true" />
+        </span>
       </label>
     </div>
     <div className="grid gap-3">
