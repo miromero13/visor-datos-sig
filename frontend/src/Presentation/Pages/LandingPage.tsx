@@ -215,6 +215,15 @@ export function LandingPage() {
 							<p className="m-0 text-sm font-semibold text-[#19365f]">
 								María Ilse Romero
 							</p>
+							<p className="m-0 text-sm font-semibold text-[#19365f]">
+								Jaime Roca
+							</p>
+							<p className="m-0 text-sm font-semibold text-[#19365f]">
+								Alison Montoya
+							</p>
+							<p className="m-0 text-sm font-semibold text-[#19365f]">
+								Aracely Rojas
+							</p>
 						</div>
 					</div>
 				</section>
