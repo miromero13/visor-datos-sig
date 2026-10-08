@@ -25,8 +25,22 @@ if (args.Length > 0 && args[0] == "--migrate-database")
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddAntiforgery();
 builder.Services.AddMapResponseCompression();
+var defaultAllowedOrigins = new[]
+{
+    "http://localhost:5173",
+    "https://visordatossig.devhooh.com"
+};
+
+var configuredOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? builder.Configuration["CORS_ALLOWED_ORIGINS"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    ?? defaultAllowedOrigins;
+
 builder.Services.AddCors(options => options.AddPolicy("ViteDevelopment", policy =>
-    policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod().AllowCredentials().WithExposedHeaders("Content-Disposition")));
+    policy.WithOrigins(configuredOrigins)
+          .AllowAnyHeader()
+          .AllowAnyMethod()
+          .AllowCredentials()
+          .WithExposedHeaders("Content-Disposition")));
 builder.Services.AddSingleton<ISqlConnectionProbe, SqlServerConnectionProbe>();
 builder.Services.AddSingleton<AuthService>();
 var sessionRegistry = new SessionRegistry(builder.Configuration);
@@ -85,8 +99,15 @@ static object Envelope(AuthUser user) => new { data = new { user = new { id = us
 static IResult AuthProblem() => Results.Problem(statusCode: 401, title: "Unauthorized", detail: "Login failed.");
 static void WriteCookies(HttpContext context, JwtTokenService tokens, IssuedTokens issued, bool persistent)
 {
-    var accessOptions = new CookieOptions { HttpOnly = true, SameSite = SameSiteMode.Lax, Secure = context.Request.IsHttps, Path = "/" };
-    var refreshOptions = new CookieOptions { HttpOnly = true, SameSite = SameSiteMode.Lax, Secure = context.Request.IsHttps, Path = "/" };
+    var origin = context.Request.Headers.Origin.ToString();
+    var isCrossSiteDomain = origin.Contains("visordatossig.devhooh.com", StringComparison.OrdinalIgnoreCase)
+        || context.Request.Host.Host.Contains("api-visordatossig.devhooh.com", StringComparison.OrdinalIgnoreCase);
+
+    var sameSite = isCrossSiteDomain ? SameSiteMode.None : SameSiteMode.Lax;
+    var secure = isCrossSiteDomain || context.Request.IsHttps;
+
+    var accessOptions = new CookieOptions { HttpOnly = true, SameSite = sameSite, Secure = secure, Path = "/" };
+    var refreshOptions = new CookieOptions { HttpOnly = true, SameSite = sameSite, Secure = secure, Path = "/" };
     if (persistent)
     {
         accessOptions.Expires = issued.AccessExpiresAt;
