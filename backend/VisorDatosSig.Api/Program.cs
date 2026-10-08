@@ -36,6 +36,7 @@ builder.Services.AddScoped<ShapefileMigrationService>();
 builder.Services.AddScoped<CodigoFijoSimulationService>();
 builder.Services.AddScoped<LayerQueryService>();
 builder.Services.AddScoped<SearchQueryService>();
+builder.Services.AddScoped<UserManagementService>();
 builder.Services.AddCustomReports();
 var tokenService = new JwtTokenService(builder.Configuration, sessionRegistry);
 builder.Services.AddSingleton(tokenService);
@@ -294,6 +295,75 @@ app.MapPost("/api/sql-connection/test", async (ISqlConnectionProbe probe, Cancel
         _ => StatusCodes.Status502BadGateway
     };
     return Results.Json(new { status = result.Status.ToString(), message = result.Message }, statusCode: status);
+}).RequireAuthorization("Administrator");
+
+// Endpoints de Gestión de Usuarios y Roles (Sólo Administrador)
+app.MapGet("/api/users", async (UserManagementService userService, CancellationToken cancellationToken) =>
+{
+    try { return Results.Ok(await userService.GetUsersAsync(cancellationToken)); }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Database unavailable", detail: "No se pudieron consultar los usuarios."); }
+}).RequireAuthorization("Administrator");
+
+app.MapPost("/api/users", async (CreateUserRequest request, UserManagementService userService, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var created = await userService.CreateUserAsync(request, cancellationToken);
+        return Results.Created($"/api/users/{created?.Id}", created);
+    }
+    catch (ArgumentException ex) { return Results.Problem(statusCode: 400, title: "Bad request", detail: ex.Message); }
+    catch (InvalidOperationException ex) { return Results.Problem(statusCode: 409, title: "Conflict", detail: ex.Message); }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Database unavailable", detail: "Error al crear el usuario."); }
+}).RequireAuthorization("Administrator");
+
+app.MapPut("/api/users/{id:int}", async (int id, UpdateUserRequest request, UserManagementService userService, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var updated = await userService.UpdateUserAsync(id, request, cancellationToken);
+        return updated ? Results.NoContent() : Results.NotFound();
+    }
+    catch (ArgumentException ex) { return Results.Problem(statusCode: 400, title: "Bad request", detail: ex.Message); }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Database unavailable", detail: "Error al actualizar el usuario."); }
+}).RequireAuthorization("Administrator");
+
+app.MapPatch("/api/users/{id:int}/status", async (int id, UpdateUserStatusRequest request, UserManagementService userService, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var updated = await userService.UpdateUserStatusAsync(id, request.Activo, cancellationToken);
+        return updated ? Results.NoContent() : Results.NotFound();
+    }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Database unavailable", detail: "Error al actualizar el estado del usuario."); }
+}).RequireAuthorization("Administrator");
+
+app.MapGet("/api/roles", async (UserManagementService userService, CancellationToken cancellationToken) =>
+{
+    try { return Results.Ok(await userService.GetRolesAsync(cancellationToken)); }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Database unavailable", detail: "No se pudieron consultar los roles."); }
+}).RequireAuthorization("Administrator");
+
+app.MapPost("/api/roles", async (CreateRoleRequest request, UserManagementService userService, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var created = await userService.CreateRoleAsync(request, cancellationToken);
+        return Results.Created($"/api/roles/{created?.Id}", created);
+    }
+    catch (ArgumentException ex) { return Results.Problem(statusCode: 400, title: "Bad request", detail: ex.Message); }
+    catch (InvalidOperationException ex) { return Results.Problem(statusCode: 409, title: "Conflict", detail: ex.Message); }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Database unavailable", detail: "Error al crear el rol."); }
+}).RequireAuthorization("Administrator");
+
+app.MapPut("/api/roles/{id:int}", async (int id, UpdateRoleRequest request, UserManagementService userService, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var updated = await userService.UpdateRoleAsync(id, request, cancellationToken);
+        return updated ? Results.NoContent() : Results.NotFound();
+    }
+    catch (ArgumentException ex) { return Results.Problem(statusCode: 400, title: "Bad request", detail: ex.Message); }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Database unavailable", detail: "Error al actualizar el rol."); }
 }).RequireAuthorization("Administrator");
 
 app.Run();

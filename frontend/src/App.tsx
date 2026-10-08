@@ -6,6 +6,7 @@ import { ProfilePage } from "./Presentation/Pages/ProfilePage";
 import { MigrationPage } from "./Presentation/Pages/MigrationPage";
 import { MapPage } from "./Presentation/Pages/MapPage";
 import { QueriesPage } from "./Presentation/Pages/QueriesPage";
+import { UsersPage } from "./Presentation/Pages/UsersPage";
 import { AuthProvider } from "./Presentation/Components/AuthProvider";
 import { ProtectedRoute } from "./Presentation/Components/ProtectedRoute";
 
@@ -20,6 +21,7 @@ export function App() {
 				<Route path="/migration" element={<ProtectedRoute><MigrationPage /></ProtectedRoute>} />
 				<Route path="/map" element={<ProtectedRoute><MapPage /></ProtectedRoute>} />
 				<Route path="/queries" element={<ProtectedRoute><QueriesPage /></ProtectedRoute>} />
+				<Route path="/admin/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
 				<Route path="*" element={<LandingPage />} />
 			</Routes>
 		</AuthProvider>
