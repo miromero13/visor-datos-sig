@@ -389,6 +389,7 @@ export function MapPage() {
   const [fixedNombre, setFixedNombre] = useState("");
   const [fixedLoading, setFixedLoading] = useState(false);
   const [fixedError, setFixedError] = useState("");
+  const autoSelectOnSingleMatchRef = useRef(false);
   const [selected, setSelected] = useState<{ layer: Layer; feature: Feature } | null>(null);
   const [detail, setDetail] = useState<{ layerId: LayerId; featureId: number; feature: Feature } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -487,11 +488,24 @@ export function MapPage() {
       }
       fixedDrawnRef.current = drawnBeforePage + pageDrawn;
     } })
-      .then((result) => { if (!cancelled && generation === fixedGeneration.current) setFixedData(result); })
+      .then((result) => {
+        if (!cancelled && generation === fixedGeneration.current) {
+          setFixedData(result);
+          if (autoSelectOnSingleMatchRef.current && result.features.length === 1) {
+            autoSelectOnSingleMatchRef.current = false;
+            const singleFeature = result.features[0];
+            const fixedLayer = layers.find((candidate) => candidate.id === "CodigosFijos");
+            if (fixedLayer) {
+              setSelected({ layer: fixedLayer, feature: singleFeature });
+              setTarget({ ...singleFeature, layer: "CodigosFijos" });
+            }
+          }
+        }
+      })
       .catch((e) => { if (!cancelled && e?.name !== "AbortError") setFixedError(e instanceof Error ? e.message : "No se pudieron cargar los códigos fijos."); })
       .finally(() => { if (!cancelled && generation === fixedGeneration.current) setFixedLoading(false); });
     return () => { cancelled = true; controller.abort(); };
-  }, [fixedEstado, fixedNombre, fixedAttempt, visible.has("CodigosFijos")]);
+  }, [fixedEstado, fixedNombre, fixedAttempt, visible.has("CodigosFijos"), layers]);
   useEffect(() => {
     if (!selectedRouteLayer || selectedRouteId === null) return;
     let cancelled = false;
@@ -761,7 +775,7 @@ export function MapPage() {
                 <section className="map-sidebar-section map-search-section" aria-labelledby="map-search-heading">
                   <div className="flex items-center gap-1.5 mb-2">
                     <h2 id="map-search-heading" className="m-0">Buscar código fijo</h2>
-                    <InfoTooltip text="Filtrá puntos de suministro por estado operativo o nombre del titular." />
+                    <InfoTooltip text="Filtrá puntos de suministro por estado operativo, código fijo o nombre del titular." />
                   </div>
                   <label htmlFor="fixed-state">Estado</label>
                   <span className="relative block">
@@ -777,8 +791,38 @@ export function MapPage() {
 
                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" size={17} aria-hidden="true" />
                   </span>
-                  <label htmlFor="fixed-owner">Nombre del propietario</label>
-                  <input id="fixed-owner" className="map-fixed-owner placeholder:text-sm text-sm! [&::-webkit-search-cancel-button]:cursor-pointer" type="search" value={fixedNombreInput} onChange={(event) => setFixedNombreInput(event.target.value)} placeholder="Buscar nombre…" />
+                  <label htmlFor="fixed-owner">Nombre o Código Fijo</label>
+                  <input
+                    id="fixed-owner"
+                    className="map-fixed-owner placeholder:text-sm text-sm! [&::-webkit-search-cancel-button]:cursor-pointer"
+                    type="search"
+                    value={fixedNombreInput}
+                    onChange={(event) => {
+                      setFixedNombreInput(event.target.value);
+                      autoSelectOnSingleMatchRef.current = false;
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        const trimmed = fixedNombreInput.trim();
+                        autoSelectOnSingleMatchRef.current = true;
+                        if (trimmed !== fixedNombre) {
+                          setFixedNombre(trimmed);
+                        } else {
+                          const allFeatures = fixedPages.flatMap((page) => page);
+                          if (allFeatures.length === 1) {
+                            const singleFeature = allFeatures[0];
+                            const fixedLayer = layers.find((candidate) => candidate.id === "CodigosFijos");
+                            if (fixedLayer) {
+                              setSelected({ layer: fixedLayer, feature: singleFeature });
+                              setTarget({ ...singleFeature, layer: "CodigosFijos" });
+                            }
+                          }
+                        }
+                      }
+                    }}
+                    placeholder="Buscar nombre o código fijo…"
+                  />
                 </section>
                 <section className="map-sidebar-section map-results-section" aria-labelledby="map-results-heading">
                   <h2 id="map-results-heading">Resultados</h2>
@@ -789,7 +833,7 @@ export function MapPage() {
                     </p>
                   ) : fixedNombreInput.trim() !== fixedNombre ? (
                     <p className="map-muted" role="status">
-                      Escribí un nombre para buscar, o filtrá por estado.
+                      Escribí un nombre o código fijo para buscar, o filtrá por estado.
                     </p>
                   ) : fixedError && fixedDownloaded === 0 ? (
                     <p className="map-filter-error" role="alert">{fixedError} <button type="button" onClick={() => setFixedAttempt((attempt) => attempt + 1)}>Reintentar</button></p>

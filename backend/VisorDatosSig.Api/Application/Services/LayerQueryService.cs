@@ -32,7 +32,17 @@ public sealed class LayerQueryService(IConfiguration configuration)
         var predicates = new List<string> { "Geom IS NOT NULL" };
         if (bounds is not null) predicates.Add("Geom.STIntersects(geometry::STGeomFromText(@bbox,4326))=1");
         if (estado is not null) predicates.Add("[Estado]=@estado");
-        if (!string.IsNullOrWhiteSpace(nombre)) predicates.Add("CHARINDEX(@nombre,[Nombre])>0");
+        if (!string.IsNullOrWhiteSpace(nombre))
+        {
+            if (int.TryParse(nombre.Trim(), out var codFijoVal))
+            {
+                predicates.Add("(CHARINDEX(@nombre,[Nombre])>0 OR [CodFijo]=@codFijo OR [CodF_SQL]=@codFijo)");
+            }
+            else
+            {
+                predicates.Add("(CHARINDEX(@nombre,[Nombre])>0 OR CHARINDEX(@nombre,[CodF_SIG])>0)");
+            }
+        }
         if (afterId is not null) predicates.Add("[IdCodigo]>@afterId");
         var attributes = ProjectAttributes(layer, minimal);
         var sql = $"SELECT TOP (@limit) {string.Join(",", attributes.Select(x => $"[{x}]"))}, Geom.STAsText() AS Wkt FROM dbo.[{layer.Table}] WHERE {string.Join(" AND ", predicates)} ORDER BY [{layer.Id}]";
@@ -44,7 +54,14 @@ public sealed class LayerQueryService(IConfiguration configuration)
         if (afterId is not null) command.Parameters.Add("@afterId", SqlDbType.Int).Value = afterId.Value;
         if (bounds is not null) command.Parameters.Add("@bbox", SqlDbType.NVarChar, 200).Value = bounds;
         if (estado is not null) command.Parameters.Add("@estado", SqlDbType.Int).Value = estado.Value;
-        if (!string.IsNullOrWhiteSpace(nombre)) command.Parameters.Add("@nombre", SqlDbType.NVarChar, 200).Value = nombre.Trim();
+        if (!string.IsNullOrWhiteSpace(nombre))
+        {
+            command.Parameters.Add("@nombre", SqlDbType.NVarChar, 200).Value = nombre.Trim();
+            if (int.TryParse(nombre.Trim(), out var codFijoVal))
+            {
+                command.Parameters.Add("@codFijo", SqlDbType.Int).Value = codFijoVal;
+            }
+        }
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var wktReader = new WKTReader();
         while (await reader.ReadAsync(cancellationToken))
