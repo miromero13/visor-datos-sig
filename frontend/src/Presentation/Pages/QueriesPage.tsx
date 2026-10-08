@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, MapPin } from "lucide-react";
+import { ChevronDown, ExternalLink, MapPin } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Skeleton } from "@/Presentation/Components/ui/skeleton";
 import { InfoTooltip } from "@/Presentation/Components/ui/info-tooltip";
+import { Tooltip } from "@/Presentation/Components/ui/tooltip";
 import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
 import { ExportMenu } from "@/Presentation/Components/ExportMenu";
 import { ReportBuilderDialog } from "@/Presentation/Components/Reports/ReportBuilderDialog";
@@ -82,6 +83,49 @@ export function QueriesPage() {
     setFilters((previous) => ({ ...previous, [field]: value }));
     setPage(1);
   };
+  const getGoogleMapsUrl = (item: SearchResult) => {
+    if (!item.geometry) return null;
+    try {
+      const geo = item.geometry;
+      let lat: number | null = null;
+      let lng: number | null = null;
+
+      if (geo.type === "Point" && Array.isArray(geo.coordinates) && geo.coordinates.length >= 2) {
+        lng = Number(geo.coordinates[0]);
+        lat = Number(geo.coordinates[1]);
+      } else if (geo.type === "Polygon" && Array.isArray(geo.coordinates?.[0])) {
+        const ring = geo.coordinates[0] as Array<[number, number]>;
+        if (ring.length > 0) {
+          let minX = ring[0][0];
+          let maxX = ring[0][0];
+          let minY = ring[0][1];
+          let maxY = ring[0][1];
+          for (const pt of ring) {
+            if (pt[0] < minX) minX = pt[0];
+            if (pt[0] > maxX) maxX = pt[0];
+            if (pt[1] < minY) minY = pt[1];
+            if (pt[1] > maxY) maxY = pt[1];
+          }
+          lng = (minX + maxX) / 2;
+          lat = (minY + maxY) / 2;
+        }
+      } else if (geo.type === "LineString" && Array.isArray(geo.coordinates)) {
+        const line = geo.coordinates as Array<[number, number]>;
+        if (line.length > 0) {
+          const mid = line[Math.floor(line.length / 2)];
+          lng = mid[0];
+          lat = mid[1];
+        }
+      }
+
+      if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lng}`)}`;
+    } catch {
+      return null;
+    }
+  };
+
   const openOnMap = (item: SearchResult) => {
     const targetLayer = item.layer ?? (layerId === allLayers ? undefined : layerId);
     if (targetLayer) navigate(`/map?layer=${encodeURIComponent(targetLayer)}&id=${encodeURIComponent(String(item.id))}`);
@@ -191,28 +235,28 @@ export function QueriesPage() {
                 <table className="search-table">
                   <thead>
                     <tr>
-                      {layerId === allLayers && <th>Capa</th>}
-                      <th>ID</th>
+                      {layerId === allLayers && <th className="col-shrink">Capa</th>}
+                      <th className="col-id">ID</th>
                       {layerId === allLayers ? <th>Atributos</th> : fields.map((field) => <th key={field}>{field}</th>)}
-                      <th className="text-right">Acción</th>
+                      <th className="col-actions">Acción</th>
                     </tr>
                   </thead>
                   <tbody>
                     {[1, 2, 3, 4, 5, 6, 7].map((row) => (
                       <tr key={`skeleton-${row}`}>
                         {layerId === allLayers && (
-                          <td>
+                          <td className="col-shrink">
                             <Skeleton className="h-4 w-20 rounded-md" />
                           </td>
                         )}
-                        <td>
+                        <td className="col-id">
                           <Skeleton className="h-4 w-12 rounded-sm" />
                         </td>
                         <td>
                           <Skeleton className="h-4 w-48 rounded-sm" />
                         </td>
-                        <td className="text-right">
-                          <Skeleton className="ml-auto h-6 w-24 rounded-md" />
+                        <td className="col-actions">
+                          <Skeleton className="ml-auto h-6 w-36 rounded-md" />
                         </td>
                       </tr>
                     ))}
@@ -238,15 +282,10 @@ export function QueriesPage() {
                     <table className="search-table">
                       <thead>
                         <tr>
-                          {layerId === allLayers && <th>Capa</th>}
-                          <th>ID</th>
+                          {layerId === allLayers && <th className="col-shrink">Capa</th>}
+                          <th className="col-id">ID</th>
                           {layerId === allLayers ? <th>Atributos</th> : fields.map((field) => <th key={field}>{field}</th>)}
-                          <th className="text-right">
-                            <span className="inline-flex items-center gap-1">
-                              Acción
-                              <InfoTooltip side="left" text="Navegá directamente a la posición geográfica de la entidad en el visor interactivo." />
-                            </span>
-                          </th>
+                          <th className="col-actions">Acción</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -262,11 +301,11 @@ export function QueriesPage() {
                           return (
                             <tr key={`${itemLayer}-${item.id}-${index}`}>
                               {layerId === allLayers && (
-                                <td>
+                                <td className="col-shrink">
                                   <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">{itemLayer ? layerLabels[itemLayer] : "—"}</span>
                                 </td>
                               )}
-                              <td className="font-mono text-xs text-slate-500">{item.id}</td>
+                              <td className="col-id font-mono text-xs text-slate-500">{item.id}</td>
                               {layerId === allLayers ? (
                                 <td className="text-slate-600">
                                   {displayFields
@@ -318,11 +357,28 @@ export function QueriesPage() {
                                   );
                                 })
                               )}
-                              <td className="text-right">
-                                <button className="query-map-link ml-auto" type="button" onClick={() => openOnMap(item)}>
-                                  <MapPin size={13} aria-hidden="true" />
-                                  Ver en mapa
-                                </button>
+                              <td className="col-actions">
+                                <div className="inline-flex items-center justify-end gap-1.5">
+                                  {getGoogleMapsUrl(item) && (
+                                    <Tooltip content="Abrir en Google Maps" side="top">
+                                      <a
+                                        href={getGoogleMapsUrl(item)!}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 shadow-2xs no-underline transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                                      >
+                                        <span>Google Maps</span>
+                                        <ExternalLink size={12} className="text-slate-400" aria-hidden="true" />
+                                      </a>
+                                    </Tooltip>
+                                  )}
+                                  <Tooltip content="Ver en mapa interactivo" side="top">
+                                    <button className="query-map-link" type="button" onClick={() => openOnMap(item)}>
+                                      <MapPin size={13} aria-hidden="true" />
+                                      Ver en mapa
+                                    </button>
+                                  </Tooltip>
+                                </div>
                               </td>
                             </tr>
                           );

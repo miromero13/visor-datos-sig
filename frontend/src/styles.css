@@ -196,12 +196,26 @@
 }
 .search-table th,
 .search-table td {
-  max-width: 260px;
   padding: 10px 14px;
   border-bottom: 1px solid #f1f5f9;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.search-table th.col-shrink,
+.search-table td.col-shrink {
+  width: 1%;
+  white-space: nowrap;
+}
+.search-table th.col-id,
+.search-table td.col-id {
+  width: 90px;
+}
+.search-table th.col-actions,
+.search-table td.col-actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
 }
 .search-table th {
   position: sticky;

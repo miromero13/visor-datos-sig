@@ -59,7 +59,7 @@ export function AuthenticatedLayout({ children, activeItem }: AuthenticatedLayou
 
       {/* Sidebar: Clean modern Shadcn style with border-r */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-slate-200/90 bg-white text-slate-700 transition-all duration-300 ease-in-out md:sticky md:top-0 md:h-screen md:shrink-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex flex-col border-r border-slate-200/90 bg-white text-slate-700 transition-all duration-300 ease-in-out md:sticky md:top-0 md:h-screen md:shrink-0 ${
           isMobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full md:translate-x-0"
         } ${isCollapsed ? "md:w-20" : "md:w-72"} w-80`}
       >

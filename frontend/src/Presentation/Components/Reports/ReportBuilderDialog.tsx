@@ -154,8 +154,8 @@ export function ReportBuilderDialog({ open, onOpenChange, initial }: Props) {
 
   return <Dialog.Root open={open} onOpenChange={onOpenChange}>
     <Dialog.Portal>
-      <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-950/50" />
-      <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex h-[min(92vh,780px)] w-[min(1080px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-white text-slate-900 shadow-2xl outline-none" aria-describedby="report-builder-description">
+      <Dialog.Overlay className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-xs" />
+      <Dialog.Content className="fixed left-1/2 top-1/2 z-[101] flex h-[min(92vh,780px)] w-[min(1080px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-white text-slate-900 shadow-2xl outline-none" aria-describedby="report-builder-description">
         <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
           <div>
             <Dialog.Title className="m-0 text-lg font-semibold">Reporte personalizado{activeTemplate && <span className="ml-2 text-sm font-normal text-slate-500">· {activeTemplate.name}</span>}</Dialog.Title>
