@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { LockKeyhole, UserRound } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole, UserRound } from "lucide-react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/Presentation/Components/ui/button";
 import { Card } from "@/Presentation/Components/ui/card";
@@ -10,6 +10,7 @@ import { useAuth } from "@/Presentation/Components/AuthProvider";
 export function LoginPage() {
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [pending, setPending] = useState(false);
   const { error, user, loading, login: authenticate } = useAuth();
@@ -38,7 +39,7 @@ export function LoginPage() {
   if (user) return <Navigate to="/dashboard" replace />;
   return (
     <main className="min-h-[100dvh] bg-[#F8FAFC] lg:grid lg:grid-cols-[670px_minmax(0,1fr)]">
-      <section className="flex min-h-[560px] flex-col justify-between bg-[#0F172A] px-8 py-10 text-white sm:px-12 lg:min-h-[100dvh] lg:px-16 lg:py-[70px]">
+      <section className="hidden min-h-[560px] flex-col justify-between bg-[#0F172A] px-8 py-10 text-white sm:px-12 lg:flex lg:min-h-[100dvh] lg:px-16 lg:py-[70px]">
         <div>
           <Brand light />
           <p className="mt-8 text-[11px] font-semibold tracking-[.18em] text-sky-300">PLATAFORMA DE GESTIÓN GEOGRÁFICA</p>
@@ -53,7 +54,7 @@ export function LoginPage() {
         </div>
         <p className="mt-7 text-[10px] font-medium tracking-[.16em] text-slate-400">INFORMACIÓN OFICIAL · ACCESO SEGURO</p>
       </section>
-      <section className="flex min-h-[calc(100dvh-560px)] flex-col items-center justify-center px-5 py-10 sm:px-10 lg:min-h-[100dvh] lg:px-8">
+      <section className="flex min-h-[100dvh] flex-col items-center justify-center px-5 py-10 sm:px-10 lg:min-h-[100dvh] lg:px-8">
         <Card className="block w-full max-w-[470px] rounded-[18px] border border-[#E2E8F0] bg-white p-7 shadow-none sm:p-10" data-testid="login-panel">
           <p className="mb-2 text-xs font-semibold tracking-wide text-[#2563EB]">Bienvenida</p>
           <h2 className="text-2xl font-semibold tracking-tight text-[#0F172A]">Ingresá a tu espacio</h2>
@@ -71,7 +72,16 @@ export function LoginPage() {
             </label>
             <div className="relative">
               <LockKeyhole aria-hidden="true" size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <Input className="h-11 w-full rounded-md border-[#CBD5E1] bg-white pl-9 text-[#253b5b]" id="password" name="password" type="password" autoComplete="current-password" placeholder="Ingresá tu contraseña" value={password} onChange={(event) => setPassword(event.target.value)} required aria-describedby={error ? "login-error" : undefined} />
+              <Input className="h-11 w-full rounded-md border-[#CBD5E1] bg-white pl-9 pr-12 text-[#253b5b]" id="password" name="password" type={showPassword ? "text" : "password"} autoComplete="current-password" placeholder="Ingresá tu contraseña" value={password} onChange={(event) => setPassword(event.target.value)} required aria-describedby={error ? "login-error" : undefined} />
+              <button
+                type="button"
+                aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                aria-controls="password"
+                onClick={() => setShowPassword((visible) => !visible)}
+                className="absolute right-0 top-0 flex size-11 cursor-pointer items-center justify-center rounded-md text-slate-500 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              >
+                {showPassword ? <EyeOff aria-hidden="true" size={18} /> : <Eye aria-hidden="true" size={18} />}
+              </button>
             </div>
             <label className="mt-1 flex min-h-10 items-center gap-2 text-sm text-slate-600">
               <input className="accent-blue-600" type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} />
@@ -79,7 +89,7 @@ export function LoginPage() {
             </label>
             {error && (
               <p id="login-error" role="alert" className="text-sm text-red-700">
-                No pudimos validar tus credenciales.
+                {error}
               </p>
             )}
             <Button className="mt-2 min-h-[46px] w-full bg-[#2563EB] text-sm font-semibold text-white hover:bg-blue-700" type="submit" disabled={pending}>
