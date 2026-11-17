@@ -10,7 +10,11 @@
 
 # Local MCP configuration may contain credentials
 .pi/mcp.json
+.agents/plugins/**/mcp_config.json
 .vscode
 .pi
 skills-lock.json
 odd/
+
+.agents/
+.codegraph/
