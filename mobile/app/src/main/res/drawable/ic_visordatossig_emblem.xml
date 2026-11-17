@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+
+    <!-- Emblema exterior inclinado -7 grados VisorDatosSIG -->
+    <group
+        android:pivotX="48"
+        android:pivotY="48"
+        android:rotation="-7">
+        <path
+            android:fillColor="#0e224d"
+            android:strokeColor="#237fc9"
+            android:strokeWidth="2"
+            android:pathData="M 32,16 L 64,16 A 16,16 0 0 1 80,32 L 80,64 A 16,16 0 0 1 64,80 L 32,80 A 16,16 0 0 1 16,64 L 16,32 A 16,16 0 0 1 32,16 Z" />
+    </group>
+
+    <!-- Recuadro interior recto con borde celeste VisorDatosSIG -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#7dd3fc"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:pathData="M 39,33 L 57,33 A 6,6 0 0 1 63,39 L 63,57 A 6,6 0 0 1 57,63 L 39,63 A 6,6 0 0 1 33,57 L 33,39 A 6,6 0 0 1 39,33 Z" />
+</vector>
