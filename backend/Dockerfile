@@ -13,8 +13,8 @@ RUN dotnet publish backend/VisorDatosSig.Api/VisorDatosSig.Api.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app/publish .
+RUN mkdir -p /app/uploads/evidencias && chmod -R 777 /app/uploads
 ENV ASPNETCORE_URLS=http://+:8080 \
     ASPNETCORE_ENVIRONMENT=Production
 EXPOSE 8080
-USER $APP_UID
 ENTRYPOINT ["dotnet", "VisorDatosSig.Api.dll"]
