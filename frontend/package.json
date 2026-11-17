@@ -16,6 +16,7 @@
     "html2canvas": "^1.4.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.49.0",
+    "maplibre-gl": "6.18.0",
     "radix-ui": "^1.6.7",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

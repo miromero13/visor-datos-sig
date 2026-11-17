@@ -123,12 +123,18 @@ export function MigrationPage() {
 
   return (
     <AuthenticatedLayout activeItem="Migración">
-      <main className="min-w-0 flex-1 px-4 py-8 sm:px-8 lg:px-12">
-        <div className="mx-auto max-w-4xl">
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Migración de capas</h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Seleccioná los componentes Shapefile de las capas aprobadas, validá el contenido y luego ejecutá la migración. Los archivos se envían a la API solo al validar o ejecutar; no se guardan en el navegador.</p>
+      <main className="flex min-w-0 flex-1 flex-col gap-5 px-6 py-5 lg:px-8">
+        <div className="w-full">
+          <header className="flex flex-col gap-1">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+              Migración de capas
+            </h1>
+            <p className="m-0 text-xs text-slate-500">
+              Seleccioná los componentes Shapefile de las capas aprobadas, validá el contenido y luego ejecutá la migración. Los archivos se envían a la API solo al validar o ejecutar; no se guardan en el navegador.
+            </p>
+          </header>
 
-          <section className="mt-8 rounded-xl border border-slate-200 bg-white p-5 sm:p-7" aria-labelledby="files-heading">
+          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 sm:p-7" aria-labelledby="files-heading">
             <div className="flex items-center gap-2">
               <h2 id="files-heading" className="text-lg font-semibold text-slate-900 m-0">
                 1. Archivos de origen
@@ -136,7 +142,7 @@ export function MigrationPage() {
               <InfoTooltip text="Seleccioná los 4 archivos obligatorios (.shp, .shx, .dbf, .prj) correspondientes a cada capa que desees importar." />
             </div>
             <p className="mt-2 text-sm text-slate-600">Por cada capa incluí los cuatro componentes requeridos: {components.join(", ")}.</p>
-            <ul className="mt-3 grid gap-1 text-sm text-slate-700 sm:grid-cols-2">
+            <ul className="mt-3 grid gap-1 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-4">
               {approvedLayers.map((layer) => (
                 <li key={layer} className="font-mono">
                   {layer}
@@ -194,7 +200,7 @@ export function MigrationPage() {
               ? <p role="status" className="mt-4 rounded-lg border border-slate-300 bg-white p-4 text-sm text-slate-800">No hay códigos fijos guardados; no se actualizaron registros.</p>
               : <div role="status" className="mt-4 rounded-lg border border-amber-300 bg-white p-4 text-sm text-slate-900" aria-live="polite">
                   <h3 className="font-semibold">Simulación persistida: {simulationResult.total.toLocaleString("es-AR")} códigos fijos</h3>
-                  <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+                  <ul className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-5">
                     {[{ state: 1, label: "Normal", color: "text-green-700" }, { state: 3, label: "Cortado", color: "text-amber-700" }, { state: 2, label: "Para corte", color: "text-orange-700" }, { state: 4, label: "Baja parcial", color: "text-red-600" }, { state: 5, label: "Baja total", color: "text-red-900" }].map(({ state, label, color }) => <li key={state} className={color}>{label}: {(simulationResult.counts[String(state)] ?? 0).toLocaleString("es-AR")}</li>)}
                   </ul>
                 </div>)}

@@ -4,13 +4,15 @@ import { useSearchParams } from "react-router-dom";
 import L from "leaflet";
 import { createRoot } from "react-dom/client";
 import html2canvas from "html2canvas";
-import { Camera, Crosshair, Maximize, Printer, Plus, Minus, ChevronDown, MapPin, ExternalLink, X } from "lucide-react";
+import { Camera, Compass, Crosshair, Maximize, Printer, Plus, Minus, ChevronDown, MapPin, ExternalLink, X } from "lucide-react";
 import { Skeleton } from "@/Presentation/Components/ui/skeleton";
 import { InfoTooltip } from "@/Presentation/Components/ui/info-tooltip";
 import { AuthenticatedLayout } from "@/Presentation/Layouts/AuthenticatedLayout";
 import { getLayerExtent, getLayerFeatures, getAllFixedCodeFeatures, getLayerDetail, getLayers, searchLayer, type Extent, type Feature, type FeatureCollection, type Layer, type LayerId, type SearchResult } from "@/Application/Services/layers";
 import "leaflet/dist/leaflet.css";
 import { appendFeaturesProgressively } from "./mapProgressiveDrawing";
+import { Map3D, type Map3DHandle } from "./Map3D";
+import type { MapCamera, MapCollections } from "./map3dStyle";
 
 const colors: Record<LayerId, string> = { CodigosFijos: "#e11d48", Lotes: "#0ea5e9", Manzanas: "#7c3aed", Vias: "#f59e0b" };
 const fixedStates = [
@@ -41,18 +43,23 @@ function loadPalette(): Record<string, string> {
     return { ...defaultPalette };
   }
 }
-type BasemapId = "osm" | "opentopomap" | "satellite" | "carto-light" | "carto-dark" | "no-labels" | "none";
+type BasemapId = "none" | "osm" | "opentopomap" | "satellite";
+/* Opciones cartográficas comentadas a solicitud:
+type CartoBasemapId = "carto-light" | "carto-dark" | "no-labels";
+*/
 type Basemap = { label: string; url?: string; attribution?: string };
+/*
 const cartoBasemapKey = (import.meta.env.VITE_CARTO_BASEMAP_KEY ?? "").trim();
 const withCartoKey = (url: string) => (cartoBasemapKey ? `${url}?key=${encodeURIComponent(cartoBasemapKey)}` : url);
+*/
 const basemaps: Record<BasemapId, Basemap> = {
+  none: { label: "Sin mapa base" },
   osm: { label: "OpenStreetMap", url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' },
   opentopomap: { label: "OpenTopoMap", url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="https://www2.jpl.nasa.gov/srtm/">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org/">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)' },
   satellite: { label: "Imágenes satelitales", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attribution: 'Tiles &copy; <a href="https://www.esri.com/">Esri</a> — Sources: Esri, Maxar, Earthstar Geographics, and the GIS User Community' },
-  "carto-light": { label: "Cartografía clara", url: withCartoKey("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"), attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' },
-  "carto-dark": { label: "Cartografía oscura", url: withCartoKey("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"), attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' },
-  "no-labels": { label: "Base sin etiquetas", url: withCartoKey("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"), attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' },
-  none: { label: "Sin mapa base" },
+  // "carto-light": { label: "Cartografía clara", url: withCartoKey("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"), attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' },
+  // "carto-dark": { label: "Cartografía oscura", url: withCartoKey("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"), attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' },
+  // "no-labels": { label: "Base sin etiquetas", url: withCartoKey("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"), attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' },
 };
 const MAX_MAP_ZOOM = 17;
 const FIXED_CODES_PANE = "fixed-codes-overlay";
@@ -360,7 +367,7 @@ export function MapPage() {
   const requestedId = searchParams.get("id");
   const selectedRouteLayer = requestedLayer && allowedLayerIds.has(requestedLayer as LayerId) ? (requestedLayer as LayerId) : null;
   const selectedRouteId = requestedId && /^\d+$/.test(requestedId) && Number.isSafeInteger(Number(requestedId)) ? Number(requestedId) : null;
-  const [basemapId, setBasemapId] = useState<BasemapId>("osm");
+  const [basemapId, setBasemapId] = useState<BasemapId>("none");
   const [sidebarTab, setSidebarTab] = useState("search");
   const sidebarTabs = [
     { id: "search", label: "Buscar" },
@@ -399,13 +406,36 @@ export function MapPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [target, setTarget] = useState<SearchResult | null>(null);
+
+  const [viewMode, setViewMode] = useState<"2D" | "3D">("2D");
+  const viewModeRef = useRef(viewMode);
+  viewModeRef.current = viewMode;
+  const [bearing, setBearing] = useState<number>(0);
+  const [pitch, setPitch] = useState<number>(60);
+  const [camera, setCamera] = useState<MapCamera | null>(null);
+  const map3dRef = useRef<Map3DHandle | null>(null);
+
+  const switchView = (mode: "2D" | "3D") => {
+    setViewMode(mode);
+  };
+
+  const mapCollections: MapCollections = useMemo(
+    () => ({
+      ...data,
+      CodigosFijos: (fixedData ?? {
+        type: "FeatureCollection",
+        features: fixedPages.flatMap((p) => p),
+      }) as unknown as GeoJSON.FeatureCollection,
+    }) as MapCollections,
+    [data, fixedData, fixedPages],
+  );
   useEffect(() => {
     let cancelled = false;
     getLayers()
       .then(async (items) => {
         if (cancelled) return;
         setLayers(items);
-        setVisible(new Set(items.map((x) => x.id)));
+        setVisible(new Set());
         if (items.length) {
           const results = await Promise.allSettled(items.map((item) => getLayerExtent(item.id)));
           // A stable reference keeps layer visibility and remote features from changing the overview.
@@ -466,8 +496,18 @@ export function MapPage() {
     if (selected?.layer.id === "CodigosFijos") { setSelected(null); setTarget(null); }
     getAllFixedCodeFeatures({ estado: fixedEstado ? Number(fixedEstado) : undefined, nombre: fixedNombre }, controller.signal, { minimal: true, pageSize: 5000, onPage: async (page, cumulativeCount) => {
       if (cancelled || generation !== fixedGeneration.current || controller.signal.aborted) return;
-      if (!fixedGeoJson.current) throw new Error("El renderizador de códigos fijos aún no está listo.");
       setFixedPages((previous) => [...previous, page.features]); setFixedDownloaded(cumulativeCount);
+      setFixedData((prev) => ({
+        ...prev,
+        type: "FeatureCollection",
+        features: [...(prev?.features ?? []), ...page.features],
+        limit: 5000,
+        numberReturned: cumulativeCount,
+      } as FeatureCollection));
+      if (!fixedGeoJson.current) {
+        if (viewModeRef.current === "3D") return;
+        throw new Error("El renderizador de códigos fijos aún no está listo.");
+      }
       const drawnBeforePage = fixedDrawnRef.current;
       let pageDrawn = 0;
       try {
@@ -506,6 +546,16 @@ export function MapPage() {
       .finally(() => { if (!cancelled && generation === fixedGeneration.current) setFixedLoading(false); });
     return () => { cancelled = true; controller.abort(); };
   }, [fixedEstado, fixedNombre, fixedAttempt, visible.has("CodigosFijos"), layers]);
+  const previousViewMode = useRef(viewMode);
+  useEffect(() => {
+    if (previousViewMode.current === "3D" && viewMode === "2D" && fixedGeoJson.current) {
+      const all = fixedPages.flatMap((p) => p);
+      all.forEach((f) => fixedGeoJson.current?.addData(f as unknown as GeoJSON.Feature));
+      fixedDrawnRef.current = all.length;
+      setFixedDrawn(all.length);
+    }
+    previousViewMode.current = viewMode;
+  }, [viewMode, fixedPages]);
   useEffect(() => {
     if (!selectedRouteLayer || selectedRouteId === null) return;
     let cancelled = false;
@@ -569,6 +619,9 @@ export function MapPage() {
     }
   };
   const captureMap = async () => {
+    if (viewMode === "3D" && map3dRef.current) {
+      return await map3dRef.current.capture();
+    }
     const mapCanvas = mapCanvasRef.current;
     if (!mapCanvas) throw new Error("No se encontró el mapa para capturar.");
     mapCanvas.classList.add("map-canvas-exporting");
@@ -632,13 +685,15 @@ export function MapPage() {
     <PaletteContext.Provider value={palette}>
       <AuthenticatedLayout activeItem="Visor de mapa">
         <main className="map-page">
-          <div className="map-heading">
-            <div>
-              <h1>Visor de mapa</h1>
-              <p>Explorá las capas geográficas disponibles.</p>
+          <header className="queries-heading flex items-center justify-between gap-4">
+            <div className="flex flex-col gap-1">
+              <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Visor de mapa</h1>
+              <p className="m-0 text-xs text-slate-500">Explorá las capas geográficas disponibles en el sistema.</p>
             </div>
-            <span className="map-coordinate-note">Sistema de coordenadas · WGS 84</span>
-          </div>
+            <div className="shrink-0">
+              <span className="map-coordinate-note">Sistema de coordenadas · WGS 84</span>
+            </div>
+          </header>
           {error && (
             <div className="map-alert" role="alert">
               {error}
@@ -656,23 +711,124 @@ export function MapPage() {
           )}
           <div className="map-workspace" ref={workspaceRef}>
             <section className="map-canvas" ref={mapCanvasRef} aria-label="Mapa interactivo">
-              <MapContainer center={initialMapCenter} zoom={INITIAL_MAP_ZOOM} maxZoom={MAX_MAP_ZOOM} zoomControl={false} scrollWheelZoom preferCanvas className="leaflet-map">
-                <Pane name={FIXED_CODES_PANE} style={{ zIndex: 625 }} />
-                <MapClickHandler onEmptyClick={clearSelection} />
-                <MapToolbarControl extent={extent} fullscreen={fullscreen} toggleFullscreen={() => void toggleFullscreen()} printMap={() => void printMap()} exportPng={() => void exportPng()} />
-                <MapSizeSynchronizer extent={extent} target={target} />
-                <LoadedDataFit extent={extent} target={target} />
-                {basemaps[basemapId].url && <TileLayer key={basemapId} attribution={basemaps[basemapId].attribution} url={basemaps[basemapId].url} crossOrigin="anonymous" />}
-                <MapView target={target} targetLayer={selected?.layer.id ?? target?.layer ?? null} fixedRenderer={fixedRenderer} />
-                {visible.has("CodigosFijos") && <FixedCodeDrawingLayer key={`${fixedEstado}-${fixedNombre}-${fixedAttempt}`} rootRef={fixedGeoJson} palette={palette} onSelect={(feature) => { const fixedLayer = layers.find((item) => item.id === "CodigosFijos"); if (fixedLayer) selectMap(feature, fixedLayer); }} />}
-                {activeLayers.map((layer) => {
-                  if (layer.id === "CodigosFijos") return null;
-                  const collection = data[layer.id];
-                  if (!collection) return null;
-                  return <ZoomStyledGeoJSON key={`${layer.id}-all`} layer={layer} data={collection as GeoJSON.FeatureCollection} onSelect={(feature) => selectMap(feature, layer)} />;
-                })}
-              </MapContainer>
-              {!loading && activeLayers.length > 0 && activeLayers.every((layer) => (layer.id === "CodigosFijos" ? fixedData : data[layer.id])?.features.length === 0) && <div className="map-empty">No hay elementos geográficos para mostrar.</div>}
+              {viewMode === "3D" ? (
+                <>
+                  <Map3D
+                    ref={map3dRef}
+                    camera={camera}
+                    bearing={bearing}
+                    pitch={pitch}
+                    basemap={basemaps[basemapId]}
+                    layers={orderedLayers.filter((l) => visible.has(l.id))}
+                    data={mapCollections}
+                    palette={palette}
+                    selected={selected}
+                    target={target}
+                    extent={extent}
+                    onSelect={selectMap}
+                    onClear={clearSelection}
+                    onCameraChange={setCamera}
+                    onBearingChange={setBearing}
+                    onPitchChange={setPitch}
+                    onFallback={() => switchView("2D")}
+                  />
+                  <div
+                    className="leaflet-bar map-toolbar-control absolute top-3 left-3 z-[1000] overflow-hidden"
+                    role="toolbar"
+                    aria-label="Herramientas del mapa"
+                  >
+                    <button
+                      type="button"
+                      aria-label="Acercar mapa"
+                      data-tooltip="Acercar mapa"
+                      onClick={() => map3dRef.current?.zoomIn()}
+                    >
+                      <Plus size={18} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Alejar mapa"
+                      data-tooltip="Alejar mapa"
+                      onClick={() => map3dRef.current?.zoomOut()}
+                    >
+                      <Minus size={18} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Centrar mapa"
+                      data-tooltip="Centrar mapa"
+                      onClick={() => map3dRef.current?.center()}
+                    >
+                      <Crosshair size={18} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={fullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+                      data-tooltip={fullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+                      onClick={() => void toggleFullscreen()}
+                    >
+                      <Maximize size={17} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Imprimir vista actual"
+                      data-tooltip="Imprimir vista actual"
+                      onClick={() => void printMap()}
+                    >
+                      <Printer size={17} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Exportar vista actual como PNG"
+                      data-tooltip="Exportar vista actual como PNG"
+                      onClick={() => void exportPng()}
+                    >
+                      <Camera size={17} aria-hidden="true" />
+                    </button>
+                  </div>
+                  <div
+                    className="absolute top-3 left-16 z-[1000] flex items-center gap-2 rounded-lg border border-slate-200/90 bg-white/95 px-2.5 py-1.5 shadow-xs backdrop-blur-xs text-xs font-medium text-slate-700"
+                    role="status"
+                    aria-label="Orientación e inclinación de la vista 3D"
+                  >
+                    <button
+                      type="button"
+                      title="Hacé clic para orientar al norte"
+                      aria-label="Orientar vista al norte"
+                      onClick={() => setBearing(0)}
+                      className="flex items-center gap-1.5 cursor-pointer font-semibold text-slate-800 hover:text-blue-600 transition"
+                    >
+                      <Compass
+                        size={15}
+                        className="text-blue-600 transition-transform duration-200"
+                        style={{ transform: `rotate(${-bearing}deg)` }}
+                        aria-hidden="true"
+                      />
+                      <span className="font-mono">{Math.round(bearing)}° N</span>
+                    </button>
+                    <span className="text-slate-300" aria-hidden="true">·</span>
+                    <span className="font-mono text-[11px] text-slate-500">{Math.round(pitch)}° incl.</span>
+                  </div>
+                </>
+              ) : (
+                <MapContainer center={initialMapCenter} zoom={INITIAL_MAP_ZOOM} maxZoom={MAX_MAP_ZOOM} zoomControl={false} scrollWheelZoom preferCanvas className="leaflet-map">
+                  <Pane name={FIXED_CODES_PANE} style={{ zIndex: 625 }} />
+                  <MapClickHandler onEmptyClick={clearSelection} />
+                  <MapToolbarControl extent={extent} fullscreen={fullscreen} toggleFullscreen={() => void toggleFullscreen()} printMap={() => void printMap()} exportPng={() => void exportPng()} />
+                  <MapSizeSynchronizer extent={extent} target={target} />
+                  <LoadedDataFit extent={extent} target={target} />
+                  {basemaps[basemapId].url && <TileLayer key={basemapId} attribution={basemaps[basemapId].attribution} url={basemaps[basemapId].url} crossOrigin="anonymous" />}
+                  <MapView target={target} targetLayer={selected?.layer.id ?? target?.layer ?? null} fixedRenderer={fixedRenderer} />
+                  {visible.has("CodigosFijos") && <FixedCodeDrawingLayer key={`${fixedEstado}-${fixedNombre}-${fixedAttempt}`} rootRef={fixedGeoJson} palette={palette} onSelect={(feature) => { const fixedLayer = layers.find((item) => item.id === "CodigosFijos"); if (fixedLayer) selectMap(feature, fixedLayer); }} />}
+                  {activeLayers.map((layer) => {
+                    if (layer.id === "CodigosFijos") return null;
+                    const collection = data[layer.id];
+                    if (!collection) return null;
+                    return <ZoomStyledGeoJSON key={`${layer.id}-all`} layer={layer} data={collection as GeoJSON.FeatureCollection} onSelect={(feature) => selectMap(feature, layer)} />;
+                  })}
+                </MapContainer>
+              )}
+              {viewMode === "2D" && !loading && activeLayers.length > 0 && activeLayers.every((layer) => (layer.id === "CodigosFijos" ? fixedData : data[layer.id])?.features.length === 0) && <div className="map-empty">No hay elementos geográficos para mostrar.</div>}
               {selected && (
                 <aside className="absolute right-3 top-3 z-[1100] flex max-h-[calc(100%-24px)] w-[320px] max-w-[calc(100%-24px)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-800 shadow-lg shadow-slate-900/10 sm:right-4 sm:top-4" aria-label="Atributos del elemento seleccionado">
                   <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
@@ -779,7 +935,17 @@ export function MapPage() {
                   </div>
                   <label htmlFor="fixed-state">Estado</label>
                   <span className="relative block">
-                    <select id="fixed-state" className="block h-11 w-full cursor-pointer appearance-none rounded-lg border border-slate-300 bg-white px-3 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 [&>option]:cursor-pointer" value={fixedEstado} onChange={(event) => setFixedEstado(event.target.value)}>
+                    <select
+                      id="fixed-state"
+                      className="block h-11 w-full cursor-pointer appearance-none rounded-lg border border-slate-300 bg-white px-3 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 [&>option]:cursor-pointer"
+                      value={fixedEstado}
+                      onChange={(event) => {
+                        setFixedEstado(event.target.value);
+                        if (event.target.value && !visible.has("CodigosFijos")) {
+                          setLayerVisible("CodigosFijos", true);
+                        }
+                      }}
+                    >
                       <option value="">Todos los estados</option>
 
                       {fixedStates.map((state) => (
@@ -800,6 +966,9 @@ export function MapPage() {
                     onChange={(event) => {
                       setFixedNombreInput(event.target.value);
                       autoSelectOnSingleMatchRef.current = false;
+                      if (event.target.value.trim() && !visible.has("CodigosFijos")) {
+                        setLayerVisible("CodigosFijos", true);
+                      }
                     }}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
@@ -829,7 +998,15 @@ export function MapPage() {
                   <p className="map-muted">Seleccioná un resultado para ubicarlo en el mapa.</p>
                   {!visible.has("CodigosFijos") ? (
                     <p className="map-muted" role="status">
-                      La capa Códigos fijos está oculta. Activala en la pestaña Capas para buscar y ver resultados.
+                      La capa Códigos fijos está oculta.{" "}
+                      <button
+                        type="button"
+                        onClick={() => setLayerVisible("CodigosFijos", true)}
+                        className="cursor-pointer font-semibold text-blue-600 hover:underline"
+                      >
+                        Activar capa ahora
+                      </button>{" "}
+                      para buscar y ver resultados en el mapa.
                     </p>
                   ) : fixedNombreInput.trim() !== fixedNombre ? (
                     <p className="map-muted" role="status">
@@ -886,11 +1063,112 @@ export function MapPage() {
                   )}
                 </section>
               </div>
-              <div id="map-panel-layers" role="tabpanel" aria-labelledby="map-tab-layers" hidden={sidebarTab !== "layers"}>
+              <div id="map-panel-layers" role="tabpanel" aria-labelledby="map-tab-layers" aria-label="Capas" hidden={sidebarTab !== "layers"}>
+                <section className="map-sidebar-section border-b border-[#e2e8f0]" aria-labelledby="map-viewmode-heading">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <h2 id="map-viewmode-heading" className="m-0">Modo de vista</h2>
+                    <InfoTooltip text="Cambiá entre la vista cartográfica clásica en 2D y la vista 3D con elevación real del terreno." />
+                  </div>
+                  <div role="group" aria-label="Modo de vista 2D o 3D" className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
+                    <button
+                      type="button"
+                      aria-pressed={viewMode === "2D"}
+                      onClick={() => switchView("2D")}
+                      className={`h-8 cursor-pointer rounded-md text-xs font-semibold transition ${
+                        viewMode === "2D" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Vista 2D (0°)
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={viewMode === "3D"}
+                      onClick={() => switchView("3D")}
+                      className={`h-8 cursor-pointer rounded-md text-xs font-semibold transition ${
+                        viewMode === "3D" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Vista 3D · Terreno
+                    </button>
+                  </div>
+                  {viewMode === "3D" && (
+                    <div className="mt-3.5 space-y-4 rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-slate-800">
+                            Orientación
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-800">
+                              {Math.round(bearing)}°
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setBearing(0)}
+                              className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-blue-600 cursor-pointer transition"
+                            >
+                              Orientar al norte
+                            </button>
+                          </div>
+                        </div>
+                        <input
+                          type="range"
+                          aria-label="Rotación de orientación en vista 3D"
+                          min={-180}
+                          max={180}
+                          step="0.1"
+                          value={bearing}
+                          onChange={(e) => setBearing(parseFloat(e.target.value))}
+                          className="map-slider"
+                        />
+                        <div className="flex justify-between text-[10px] font-medium text-slate-400">
+                          <span>-180°</span>
+                          <span className="text-slate-500 font-semibold">0° (Norte)</span>
+                          <span>+180°</span>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-3 space-y-2.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-slate-800">
+                            Inclinación 3D
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-800">
+                              {Math.round(pitch)}°
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setPitch(60)}
+                              className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-blue-600 cursor-pointer transition"
+                            >
+                              Restablecer (60°)
+                            </button>
+                          </div>
+                        </div>
+                        <input
+                          type="range"
+                          aria-label="Inclinación de perspectiva en vista 3D"
+                          min={35}
+                          max={65}
+                          step="0.5"
+                          value={pitch}
+                          onChange={(e) => setPitch(parseFloat(e.target.value))}
+                          className="map-slider"
+                        />
+                        <div className="flex justify-between text-[10px] font-medium text-slate-400">
+                          <span>35° (mínimo)</span>
+                          <span className="text-slate-500 font-semibold">60° (óptimo)</span>
+                          <span>65° (máximo)</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </section>
                 <section className="map-sidebar-section border-b border-[#e2e8f0]" aria-labelledby="map-basemap-heading">
                   <div className="flex items-center gap-1.5 mb-1">
                     <h2 id="map-basemap-heading" className="m-0">Mapa base</h2>
-                    <InfoTooltip text="Seleccioná el estilo de cartografía de fondo (OpenStreetMap, satelital o claro)." />
+                    <InfoTooltip text="Seleccioná el estilo de cartografía de fondo (OpenStreetMap, relieve topográfico o satelital)." />
                   </div>
                   <label className="map-basemap-label" htmlFor="map-basemap">
                     Estilo de fondo

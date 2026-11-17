@@ -113,6 +113,11 @@ export interface DashboardSummary {
       totalEntidades: number;
       operadoresActivos: number;
     };
+    progresoDiario?: {
+      completados: number;
+      pendientes: number;
+      observados: number;
+    };
     estados: Array<{
       valor: number;
       label: string;
@@ -148,6 +153,28 @@ export const FIXED_STATE_OPTIONS = [
   { value: 4, label: "Baja parcial" },
   { value: 5, label: "Baja total" },
 ] as const;
+
+export const DEFAULT_LAYER_COLORS: Record<LayerId, string> = {
+  CodigosFijos: "#e11d48",
+  Lotes: "#0ea5e9",
+  Manzanas: "#7c3aed",
+  Vias: "#f59e0b",
+};
+
+export function getLayerColor(layerId: LayerId): string {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MAP_PALETTE_STORAGE_KEY) ?? "null");
+    if (saved && typeof saved === "object" && !Array.isArray(saved)) {
+      const custom = saved[layerId];
+      if (typeof custom === "string" && /^#[0-9a-f]{6}$/i.test(custom)) {
+        return custom;
+      }
+    }
+  } catch {
+    // Ignore localStorage parse errors
+  }
+  return DEFAULT_LAYER_COLORS[layerId] ?? "#0ea5e9";
+}
 
 export function getFixedStateColor(stateValue: number): string {
   try {

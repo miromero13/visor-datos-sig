@@ -1,12 +1,22 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MapPage } from "./MapPage";
 
+const three = vi.hoisted(() => ({ props: null as any }));
+vi.mock("./Map3D", async () => {
+  const React = await import("react");
+  return { Map3D: (props: any) => {
+    three.props = props;
+    React.useImperativeHandle(props.ref, () => ({ capture: vi.fn(), zoomIn: vi.fn(), zoomOut: vi.fn(), center: vi.fn() }));
+    return <div aria-label="Mapa 3D interactivo"><button onClick={() => props.onFallback()}>Volver a vista 2D</button></div>;
+  } };
+});
+
 const mocks = vi.hoisted(() => ({ getLayerDetail: vi.fn(), getLayers: vi.fn(), getLayerFeatures: vi.fn(), getAllFixedCodeFeatures: vi.fn(), getLayerExtent: vi.fn(), searchLayer: vi.fn(), select: vi.fn(), roots: [] as Array<{ addData: ReturnType<typeof vi.fn>; clearLayers: ReturnType<typeof vi.fn>; eachLayer: (callback: (layer: unknown) => void) => void }>, requests: [] as Array<{ signal: AbortSignal; options: { pageSize: number; minimal: boolean; onPage: (page: any, count: number) => Promise<void> }; resolve: (value: unknown) => void; reject: (error: unknown) => void }>, frames: new Map<number, FrameRequestCallback>(), nextFrame: 0 }));
 const container = document.createElement("div");
 Object.defineProperties(container, { clientWidth: { value: 800 }, clientHeight: { value: 600 }, getBoundingClientRect: { value: () => ({ width: 800, height: 600 }) } });
-const mapFixture = { on: vi.fn(), off: vi.fn(), getContainer: () => container, invalidateSize: vi.fn(), getZoom: () => 15, getMaxZoom: () => 17, getMinZoom: () => 1, fitBounds: vi.fn(), setZoom: vi.fn(), setView: vi.fn(), zoomIn: vi.fn(), zoomOut: vi.fn(), addControl: vi.fn(), removeControl: vi.fn(), getBounds: vi.fn() };
+const mapFixture = { getCenter: () => ({ lng: -60.97, lat: -16.39 }), on: vi.fn(), off: vi.fn(), getContainer: () => container, invalidateSize: vi.fn(), getZoom: () => 15, getMaxZoom: () => 17, getMinZoom: () => 1, fitBounds: vi.fn(), setZoom: vi.fn(), setView: vi.fn(), zoomIn: vi.fn(), zoomOut: vi.fn(), addControl: vi.fn(), removeControl: vi.fn(), getBounds: vi.fn() };
 vi.mock("@/Application/Services/layers", () => mocks);
 vi.mock("@/Presentation/Layouts/AuthenticatedLayout", () => ({ AuthenticatedLayout: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock("react-leaflet", async () => {
@@ -50,12 +60,24 @@ describe("MapPage detail hydration", () => {
     mocks.getLayerDetail.mockResolvedValue({ ...collection.features[0], properties: { IdLote: 12, Descripcion: "Full detail" } });
   });
 
+  it("starts with no basemap and no layers visible by default", async () => {
+    render(<MemoryRouter><MapPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("tab", { name: "Capas" }));
+    const panel = screen.getByRole("tabpanel", { name: "Capas" });
+    expect(within(panel).getByRole("combobox", { name: "Estilo de fondo" })).toHaveValue("none");
+    await screen.findByRole("checkbox", { name: "Lotes" });
+    const checkboxes = within(panel).getAllByRole("checkbox");
+    checkboxes.forEach((cb) => expect(cb).not.toBeChecked());
+    expect(screen.queryByRole("button", { name: "Select feature 12" })).not.toBeInTheDocument();
+  });
+
   it("draws each validated page into one persistent root before the next request and preserves selection", async () => {
     mocks.getLayers.mockResolvedValue([{ id: "CodigosFijos", label: "Códigos fijos", geometryType: "Point", srid: 4326 }]);
     mocks.getAllFixedCodeFeatures.mockImplementation((_filters: unknown, signal: AbortSignal, options: { pageSize: number; minimal: boolean; onPage: (page: any, count: number) => Promise<void> }) => new Promise((resolve, reject) => { mocks.requests.push({ signal, options, resolve, reject }); }));
     render(<MemoryRouter><MapPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Activar capa ahora" }));
     await waitFor(() => expect(mocks.requests.length).toBeGreaterThan(0));
-    fireEvent.change(screen.getByLabelText("Nombre del propietario"), { target: { value: "Ana" } });
+    fireEvent.change(screen.getByLabelText("Nombre o Código Fijo"), { target: { value: "Ana" } });
     await waitFor(() => expect(mocks.requests.length).toBeGreaterThan(1), { timeout: 1500 });
     const request = mocks.requests.at(-1)!;
     expect(request.options).toMatchObject({ pageSize: 5000, minimal: true });
@@ -80,6 +102,7 @@ describe("MapPage detail hydration", () => {
     mocks.getLayers.mockResolvedValue([{ id: "CodigosFijos", label: "Códigos fijos", geometryType: "Point", srid: 4326 }]);
     mocks.getAllFixedCodeFeatures.mockImplementation((_filters: unknown, signal: AbortSignal, options: { pageSize: number; minimal: boolean; onPage: (page: any, count: number) => Promise<void> }) => new Promise((resolve, reject) => { mocks.requests.push({ signal, options, resolve, reject }); }));
     render(<MemoryRouter><MapPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Activar capa ahora" }));
     await waitFor(() => expect(mocks.requests.length).toBeGreaterThan(0));
     const oldRequest = mocks.requests.at(-1)!;
     const oldRoot = mocks.roots.at(-1)!;
@@ -99,8 +122,9 @@ describe("MapPage detail hydration", () => {
     mocks.getLayers.mockResolvedValue([{ id: "CodigosFijos", label: "Códigos fijos", geometryType: "Point", srid: 4326 }]);
     mocks.getAllFixedCodeFeatures.mockImplementation((_filters: unknown, signal: AbortSignal, options: { pageSize: number; minimal: boolean; onPage: (page: any, count: number) => Promise<void> }) => new Promise((resolve, reject) => { mocks.requests.push({ signal, options, resolve, reject }); }));
     render(<MemoryRouter><MapPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Activar capa ahora" }));
     await waitFor(() => expect(mocks.requests.length).toBeGreaterThan(0));
-    fireEvent.change(screen.getByLabelText("Nombre del propietario"), { target: { value: "Ana" } });
+    fireEvent.change(screen.getByLabelText("Nombre o Código Fijo"), { target: { value: "Ana" } });
     await waitFor(() => expect(mocks.requests.length).toBeGreaterThan(1), { timeout: 1500 });
     const request = mocks.requests.at(-1)!; const root = mocks.roots.at(-1)!;
     let drawing!: Promise<void>;
@@ -127,8 +151,9 @@ describe("MapPage detail hydration", () => {
       };
     }));
     render(<MemoryRouter><MapPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Activar capa ahora" }));
     await waitFor(() => expect(mocks.requests.length).toBeGreaterThan(0));
-    fireEvent.change(screen.getByLabelText("Nombre del propietario"), { target: { value: "Ana" } });
+    fireEvent.change(screen.getByLabelText("Nombre o Código Fijo"), { target: { value: "Ana" } });
     await waitFor(() => expect(mocks.requests.length).toBeGreaterThan(1));
     const request = mocks.requests.at(-1)!; const root = mocks.roots.at(-1)!;
     root.addData.mockImplementationOnce(() => {}).mockImplementationOnce(() => { throw new Error("draw failed"); });
@@ -157,8 +182,75 @@ describe("MapPage detail hydration", () => {
     await act(async () => { retry.resolve({ ...collection, features }); });
   });
 
+  it("keeps view, rotation and pitch controls inside Layers, not in the heading", async () => {
+    render(<MemoryRouter><MapPage /></MemoryRouter>);
+    expect(screen.queryByRole("group", { name: "Modo de vista 2D o 3D" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Capas" }));
+    const panel = screen.getByRole("tabpanel", { name: "Capas" });
+    expect(within(panel).getByRole("group", { name: "Modo de vista 2D o 3D" })).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole("button", { name: /Vista 3D/ }));
+
+    // Input spinbutton is removed: angle only moves via slider
+    expect(within(panel).queryByRole("spinbutton")).not.toBeInTheDocument();
+
+    const rotationSlider = within(panel).getByRole("slider", { name: "Rotación de orientación en vista 3D" });
+    expect(rotationSlider).toHaveAttribute("step", "0.1");
+    fireEvent.change(rotationSlider, { target: { value: "12.3" } });
+    expect(three.props.bearing).toBe(12.3);
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Orientar al norte" }));
+    expect(three.props.bearing).toBe(0);
+
+    const pitchSlider = within(panel).getByRole("slider", { name: "Inclinación de perspectiva en vista 3D" });
+    expect(pitchSlider).toHaveAttribute("min", "35");
+    expect(pitchSlider).toHaveAttribute("max", "65");
+    fireEvent.change(pitchSlider, { target: { value: "45" } });
+    expect(three.props.pitch).toBe(45);
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Restablecer (60°)" }));
+    expect(three.props.pitch).toBe(60);
+
+    fireEvent.click(within(panel).getByRole("button", { name: /Vista 2D/ }));
+    expect(within(panel).queryByRole("slider")).not.toBeInTheDocument();
+  });
+
+  it("uses a real 3D component and returns to the unchanged 2D renderer", async () => {
+    render(<MemoryRouter><MapPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("tab", { name: "Capas" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Lotes" }));
+    await screen.findByRole("button", { name: "Select feature 12" });
+    fireEvent.click(screen.getByRole("button", { name: /Vista 3D/ }));
+    expect(await screen.findByLabelText("Mapa 3D interactivo")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Select feature 12" })).not.toBeInTheDocument();
+    expect(three.props.layers[0].id).toBe("Lotes");
+    expect(three.props.data.Lotes.features[0].id).toBe(12);
+    fireEvent.click(screen.getByRole("button", { name: "Volver a vista 2D" }));
+    expect(await screen.findByRole("button", { name: "Select feature 12" })).toBeInTheDocument();
+    expect(mocks.getLayerFeatures).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps downloading fixed codes in 3D and restores the accumulated points when returning to 2D", async () => {
+    mocks.getLayers.mockResolvedValue([{ id: "CodigosFijos", label: "Códigos fijos", geometryType: "Point", srid: 4326 }]);
+    mocks.getAllFixedCodeFeatures.mockImplementation((_filters: unknown, signal: AbortSignal, options: any) => new Promise((resolve, reject) => { mocks.requests.push({ signal, options, resolve, reject }); }));
+    render(<MemoryRouter><MapPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "Activar capa ahora" }));
+    await waitFor(() => expect(mocks.requests).toHaveLength(1));
+    const request = mocks.requests[0];
+    fireEvent.click(screen.getByRole("tab", { name: "Capas" }));
+    fireEvent.click(screen.getByRole("button", { name: /Vista 3D/ }));
+    const point = { type: "Feature", id: 99, geometry: null, properties: { Nombre: "Ana" } };
+    await act(async () => { await request.options.onPage({ features: [point] }, 1); });
+    expect(three.props.data.CodigosFijos.features).toEqual([point]);
+    expect(request.signal.aborted).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: /Vista 2D/ }));
+    expect(await screen.findByRole("button", { name: "Select feature 99" })).toBeInTheDocument();
+    expect(mocks.requests).toHaveLength(1);
+  });
+
   it("hydrates full details on feature selection", async () => {
     render(<MemoryRouter><MapPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("tab", { name: "Capas" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Lotes" }));
     fireEvent.click(await screen.findByRole("button", { name: "Select feature 12" }));
     await waitFor(() => expect(mocks.getLayerDetail).toHaveBeenCalledWith("Lotes", 12, expect.any(AbortSignal)));
     expect(await screen.findByText("Full detail")).toBeInTheDocument();
@@ -169,6 +261,8 @@ describe("MapPage detail hydration", () => {
     mocks.getLayerFeatures.mockResolvedValue({ ...collection, features: [...collection.features, { ...collection.features[0], id: 13 }] });
     mocks.getLayerDetail.mockImplementation((_layer: string, id: number) => id === 12 ? new Promise((resolve) => { resolveA = resolve; }) : Promise.resolve({ ...collection.features[0], id: 13, properties: { Descripcion: "B details" } }));
     render(<MemoryRouter><MapPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("tab", { name: "Capas" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Lotes" }));
     fireEvent.click(await screen.findByRole("button", { name: "Select feature 12" }));
     fireEvent.click(screen.getByRole("button", { name: "Select feature 13" }));
     expect(await screen.findByText("B details")).toBeInTheDocument();
@@ -179,6 +273,8 @@ describe("MapPage detail hydration", () => {
   it("allows retry after detail failure", async () => {
     mocks.getLayerDetail.mockRejectedValueOnce(new Error("Temporary failure")).mockResolvedValueOnce({ ...collection.features[0], properties: { Descripcion: "Retried detail" } });
     render(<MemoryRouter><MapPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("tab", { name: "Capas" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Lotes" }));
     fireEvent.click(await screen.findByRole("button", { name: "Select feature 12" }));
     fireEvent.click(await screen.findByRole("button", { name: "Reintentar" }));
     expect(await screen.findByText("Retried detail")).toBeInTheDocument();
@@ -188,6 +284,8 @@ describe("MapPage detail hydration", () => {
   it("aborts detail requests when the selection closes and when the page unmounts", async () => {
     mocks.getLayerDetail.mockReturnValue(new Promise(() => {}));
     const view = render(<MemoryRouter><MapPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("tab", { name: "Capas" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Lotes" }));
     fireEvent.click(await screen.findByRole("button", { name: "Select feature 12" }));
     await waitFor(() => expect(mocks.getLayerDetail).toHaveBeenCalled());
     const closeSignal = mocks.getLayerDetail.mock.calls.at(-1)?.[2] as AbortSignal;

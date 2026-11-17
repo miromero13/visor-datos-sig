@@ -318,7 +318,7 @@
 }
 .map-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 320px);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -447,6 +447,61 @@
   margin: 0 0 10px 27px;
   font-size: 11px;
 }
+.map-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 9999px;
+  background: #e2e8f0;
+  outline: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.map-slider:hover {
+  background: #cbd5e1;
+}
+.map-slider:focus-visible {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+}
+.map-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.2);
+  cursor: pointer;
+  transition: transform 0.1s ease, background-color 0.15s ease;
+}
+.map-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  background: #1d4ed8;
+}
+.map-slider::-webkit-slider-thumb:active {
+  transform: scale(0.95);
+  background: #1e40af;
+}
+.map-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.2);
+  cursor: pointer;
+  transition: transform 0.1s ease, background-color 0.15s ease;
+}
+.map-slider::-moz-range-thumb:hover {
+  transform: scale(1.15);
+  background: #1d4ed8;
+}
+.map-slider::-moz-range-thumb:active {
+  transform: scale(0.95);
+  background: #1e40af;
+}
 .map-legend {
   margin: 0;
   padding-bottom: 14px;
@@ -574,7 +629,7 @@
 }
 .map-workspace:fullscreen {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 320px);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
   width: 100vw;
   height: 100vh;
   min-height: 0;
@@ -825,7 +880,7 @@
 }
 @media (max-width: 1100px) and (min-width: 701px) {
   .map-workspace {
-    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-columns: minmax(0, 1fr) 320px;
   }
 }
 @media (max-width: 700px) {
