@@ -62,7 +62,7 @@ export function AssignmentPage({ mode }: AssignmentPageProps) {
   const [activeTab, setActiveTab] = useState<"config" | "paradas" | "historial">("config");
   const [operators, setOperators] = useState<OperatorWorkloadDto[]>([]);
   const [selectedOperatorId, setSelectedOperatorId] = useState<number>(0);
-  const [quantity, setQuantity] = useState<number>(15);
+  const [quantity, setQuantity] = useState<number | "">(15);
   const [departurePoint, setDeparturePoint] = useState<DeparturePointDto | null>(null);
   const [previewPoint, setPreviewPoint] = useState<DeparturePointDto | null>(null);
   const [mapLinkInput, setMapLinkInput] = useState<string>("");
@@ -73,6 +73,8 @@ export function AssignmentPage({ mode }: AssignmentPageProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [hasSavedAssignment, setHasSavedAssignment] = useState(false);
+  const canCreateAssignment = activeTab === "historial" && hasSavedAssignment && !routeResult;
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const leafletMapRef = useRef<L.Map | null>(null);
@@ -90,9 +92,7 @@ export function AssignmentPage({ mode }: AssignmentPageProps) {
 
   const selectedOperator = useMemo(
     () =>
-      filteredOperators.find((op) => op.idUsuario === selectedOperatorId) ??
-      filteredOperators[0] ??
-      null,
+      filteredOperators.find((op) => op.idUsuario === selectedOperatorId) ?? null,
     [filteredOperators, selectedOperatorId],
   );
 
@@ -101,6 +101,7 @@ export function AssignmentPage({ mode }: AssignmentPageProps) {
     const controller = new AbortController();
     setError("");
     setSuccessMsg("");
+    setHasSavedAssignment(false);
     setRouteResult(null);
 
     Promise.all([
@@ -329,7 +330,7 @@ export function AssignmentPage({ mode }: AssignmentPageProps) {
       setDeparturePoint(previewPoint);
       setPreviewPoint(null);
     }
-    if (quantity <= 0) {
+    if (quantity === "" || quantity <= 0) {
       setError("Ingresá una cantidad válida de órdenes.");
       return;
     }
@@ -380,20 +381,35 @@ export function AssignmentPage({ mode }: AssignmentPageProps) {
         puntoPartida: departurePoint,
         idsCodigosFijos: routeResult.paradas.map((p) => p.idCodigo),
       });
+      const stopCount = routeResult.paradas.length;
       setSuccessMsg(
-        `Asignación guardada con éxito (#${saved.idAsignacion}: ${routeResult.paradas.length} órdenes asignadas a ${selectedOperator.nombre}).`,
+        `Asignación #${saved.idAsignacion} guardada. ${stopCount === 1 ? "Se asignó 1 parada" : `Se asignaron ${stopCount} paradas`} a ${selectedOperator.nombre}. Podés consultar el detalle en el historial.`,
       );
-      const [updatedOps, updatedAssigns] = await Promise.all([
-        getOperators(),
-        getAssignments(mode),
-      ]);
-      setOperators(updatedOps);
-      setRecentAssignments(updatedAssigns);
+      setHasSavedAssignment(true);
+      // Consume the saved proposal before refreshing auxiliary data.
+      setRouteResult(null);
+      setSelectedOperatorId(0);
+      setQuantity("");
+      setDeparturePoint(null);
+      setPreviewPoint(null);
+      setMapLinkInput("");
+      setLinkError("");
       setActiveTab("historial");
+
+      try {
+        const [updatedOps, updatedAssigns] = await Promise.all([
+          getOperators(),
+          getAssignments(mode),
+        ]);
+        setOperators(updatedOps);
+        setRecentAssignments(updatedAssigns);
+      } catch {
+        setError("La asignación se guardó, pero no se pudo actualizar el historial o la carga de operadores. No vuelvas a guardarla; actualizá la página para consultar los datos.");
+      }
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
+        err instanceof Error && err.message.trim()
+          ? `No se pudo guardar la asignación. ${err.message}`
           : "No se pudo guardar la asignación.",
       );
     } finally {
@@ -579,6 +595,7 @@ export function AssignmentPage({ mode }: AssignmentPageProps) {
                         onChange={(e) => setSelectedOperatorId(Number(e.target.value))}
                         className="block h-10 w-full cursor-pointer appearance-none rounded-lg border border-slate-300 bg-white px-3 pr-10 text-xs font-medium text-slate-800 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 [&>option]:cursor-pointer"
                       >
+                        <option value="">Seleccioná un operador</option>
                         {filteredOperators.map((op) => (
                           <option key={op.idUsuario} value={op.idUsuario}>
                             {op.nombre} ({op.rol})
@@ -628,7 +645,7 @@ export function AssignmentPage({ mode }: AssignmentPageProps) {
                         max={100}
                         value={quantity}
                         onChange={(e) =>
-                          setQuantity(Math.max(1, Math.min(100, Number(e.target.value) || 1)))
+                          setQuantity(e.target.value === "" ? "" : Math.max(1, Math.min(100, Number(e.target.value) || 1)))
                         }
                         className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 font-mono text-sm font-semibold text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                       />
@@ -916,11 +933,20 @@ export function AssignmentPage({ mode }: AssignmentPageProps) {
 
               <button
                 type="button"
-                disabled={saving || !routeResult || routeResult.paradas.length === 0}
-                onClick={() => void handleSaveAssignment()}
+                disabled={saving || (!canCreateAssignment && (!routeResult || routeResult.paradas.length === 0))}
+                onClick={() => {
+                  if (canCreateAssignment) {
+                    setActiveTab("config");
+                    setHasSavedAssignment(false);
+                    setSuccessMsg("");
+                    setError("");
+                  } else {
+                    void handleSaveAssignment();
+                  }
+                }}
                 className="flex h-10 w-full cursor-pointer items-center justify-center rounded-lg bg-slate-900 px-4 text-xs font-semibold text-white shadow-2xs transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {saving ? "Guardando asignación…" : "Guardar asignación"}
+                {saving ? "Guardando asignación…" : canCreateAssignment ? "Preparar otra asignación" : "Guardar asignación"}
               </button>
             </div>
           </section>
