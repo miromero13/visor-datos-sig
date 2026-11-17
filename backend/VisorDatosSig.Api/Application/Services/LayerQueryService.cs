@@ -126,7 +126,22 @@ public sealed class LayerQueryService(IConfiguration configuration)
 
             SELECT ISNULL(Estado, 0) AS Estado, COUNT_BIG(*) AS Cantidad
             FROM dbo.[CodigosFijos]
-            GROUP BY Estado;";
+            GROUP BY Estado;
+
+            IF OBJECT_ID(N'dbo.AsignacionDetalles', N'U') IS NOT NULL
+            BEGIN
+                SELECT
+                    ISNULL(SUM(CASE WHEN d.Estado IN ('Cortado', 'Reconectado') THEN 1 ELSE 0 END), 0) AS CompletadosHoy,
+                    ISNULL(SUM(CASE WHEN d.Estado = 'Pendiente' THEN 1 ELSE 0 END), 0) AS PendientesHoy,
+                    ISNULL(SUM(CASE WHEN d.Estado = 'Observado' THEN 1 ELSE 0 END), 0) AS ObservadosHoy
+                FROM dbo.[AsignacionDetalles] d
+                JOIN dbo.[Asignaciones] a ON a.IdAsignacion = d.IdAsignacion
+                WHERE CAST(a.FechaAsignacion AS DATE) = CAST(SYSDATETIME() AS DATE);
+            END
+            ELSE
+            BEGIN
+                SELECT 0 AS CompletadosHoy, 0 AS PendientesHoy, 0 AS ObservadosHoy;
+            END;";
 
         await using var command = new SqlCommand(sql, connection);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -152,6 +167,14 @@ public sealed class LayerQueryService(IConfiguration configuration)
             }
         }
 
+        int completadosHoy = 0, pendientesHoy = 0, observadosHoy = 0;
+        if (await reader.NextResultAsync(cancellationToken) && await reader.ReadAsync(cancellationToken))
+        {
+            completadosHoy = reader.IsDBNull(0) ? 0 : Convert.ToInt32(reader.GetValue(0));
+            pendientesHoy = reader.IsDBNull(1) ? 0 : Convert.ToInt32(reader.GetValue(1));
+            observadosHoy = reader.IsDBNull(2) ? 0 : Convert.ToInt32(reader.GetValue(2));
+        }
+
         var totalEntidades = manzanas + lotes + codigosFijos + vias;
 
         return new
@@ -166,6 +189,12 @@ public sealed class LayerQueryService(IConfiguration configuration)
                     vias,
                     totalEntidades,
                     operadoresActivos
+                },
+                progresoDiario = new
+                {
+                    completados = completadosHoy,
+                    pendientes = pendientesHoy,
+                    observados = observadosHoy
                 },
                 estados = new[]
                 {

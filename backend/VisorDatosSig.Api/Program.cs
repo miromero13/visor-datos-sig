@@ -8,7 +8,43 @@ using VisorDatosSig.Api;
 
 if (args.Length > 0 && args[0] == "--migrate-database")
 {
-    var scriptsPath = DatabaseScriptPath.Find(args.Length > 1 ? args[1] : null);
+    string? specificScript = null;
+    string? customPath = null;
+    int? commandTimeout = null;
+
+    for (var i = 1; i < args.Length; i++)
+    {
+        var arg = args[i];
+        if (arg.Equals("--timeout", StringComparison.OrdinalIgnoreCase) ||
+            arg.Equals("--command-timeout", StringComparison.OrdinalIgnoreCase))
+        {
+            if (i + 1 < args.Length && int.TryParse(args[i + 1], out var parsedTimeout))
+            {
+                commandTimeout = parsedTimeout;
+                i++;
+            }
+        }
+        else if (arg.StartsWith("--timeout=", StringComparison.OrdinalIgnoreCase))
+        {
+            if (int.TryParse(arg["--timeout=".Length..], out var parsedTimeout))
+                commandTimeout = parsedTimeout;
+        }
+        else if (arg.StartsWith("--command-timeout=", StringComparison.OrdinalIgnoreCase))
+        {
+            if (int.TryParse(arg["--command-timeout=".Length..], out var parsedTimeout))
+                commandTimeout = parsedTimeout;
+        }
+        else if (arg.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
+        {
+            specificScript = arg;
+        }
+        else
+        {
+            customPath = arg;
+        }
+    }
+
+    var scriptsPath = DatabaseScriptPath.Find(customPath);
     if (scriptsPath is null)
     {
         Console.Error.WriteLine("Database migration failed: ScriptDatabase directory was not found. Pass its path as the optional argument.");
@@ -16,7 +52,8 @@ if (args.Length > 0 && args[0] == "--migrate-database")
         return;
     }
     var migrationBuilder = WebApplication.CreateBuilder(args);
-    var result = await new DatabaseScriptRunner(migrationBuilder.Configuration).RunAsync(scriptsPath);
+    var runner = new DatabaseScriptRunner(migrationBuilder.Configuration);
+    var result = await runner.RunAsync(scriptsPath, specificScript, commandTimeout);
     (result.Succeeded ? Console.Out : Console.Error).WriteLine(result.Message);
     if (!result.Succeeded) Environment.ExitCode = 1;
     return;
@@ -28,19 +65,30 @@ builder.Services.AddMapResponseCompression();
 var defaultAllowedOrigins = new[]
 {
     "http://localhost:5173",
+    "http://localhost:5174",
     "https://visordatossig.devhooh.com"
 };
 
-var configuredOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? builder.Configuration["CORS_ALLOWED_ORIGINS"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+var originsFromConfig = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+var configuredOrigins = (originsFromConfig is { Length: > 0 }
+    ? originsFromConfig
+    : builder.Configuration["CORS_ALLOWED_ORIGINS"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
     ?? defaultAllowedOrigins;
 
 builder.Services.AddCors(options => options.AddPolicy("ViteDevelopment", policy =>
-    policy.WithOrigins(configuredOrigins)
-          .AllowAnyHeader()
-          .AllowAnyMethod()
-          .AllowCredentials()
-          .WithExposedHeaders("Content-Disposition")));
+    policy.SetIsOriginAllowed(origin =>
+    {
+        if (string.IsNullOrEmpty(origin)) return false;
+        if (Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+        {
+            if (uri.Host == "localhost" || uri.Host == "127.0.0.1") return true;
+        }
+        return configuredOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
+    })
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .AllowCredentials()
+    .WithExposedHeaders("Content-Disposition")));
 builder.Services.AddSingleton<ISqlConnectionProbe, SqlServerConnectionProbe>();
 builder.Services.AddSingleton<AuthService>();
 var sessionRegistry = new SessionRegistry(builder.Configuration);
@@ -51,6 +99,9 @@ builder.Services.AddScoped<CodigoFijoSimulationService>();
 builder.Services.AddScoped<LayerQueryService>();
 builder.Services.AddScoped<SearchQueryService>();
 builder.Services.AddScoped<UserManagementService>();
+builder.Services.AddSingleton<RoadNetworkGraphService>();
+builder.Services.AddScoped<AssignmentService>();
+builder.Services.AddScoped<TrackingAndExecutionService>();
 builder.Services.AddCustomReports();
 var tokenService = new JwtTokenService(builder.Configuration, sessionRegistry);
 builder.Services.AddSingleton(tokenService);
@@ -62,7 +113,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
     {
         OnMessageReceived = context =>
         {
-            context.Token = context.Request.Cookies[JwtTokenService.AccessCookie];
+            var authHeader = context.Request.Headers.Authorization.ToString();
+            if (!string.IsNullOrWhiteSpace(authHeader) &&
+                authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Token = authHeader["Bearer ".Length..].Trim();
+            }
+            else
+            {
+                context.Token = context.Request.Cookies[JwtTokenService.AccessCookie];
+            }
             return Task.CompletedTask;
         },
         OnTokenValidated = context =>
@@ -90,12 +150,32 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
 builder.Services.AddAuthorization(options => options.AddPolicy("Administrator", policy => policy.RequireRole("Administrador")));
 var app = builder.Build();
 app.UseCors("ViteDevelopment");
+var uploadsRoot = Path.Combine(app.Environment.ContentRootPath, "uploads");
+Directory.CreateDirectory(uploadsRoot);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsRoot),
+    RequestPath = "/uploads"
+});
 app.UseAntiforgery();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMapResponseCompression();
 
-static object Envelope(AuthUser user) => new { data = new { user = new { id = user.Id, login = user.Login, name = user.Name, roles = user.Roles } }, meta = new { } };
+static object Envelope(AuthUser user, IssuedTokens? issued = null) =>
+    issued is null
+        ? new { data = new { user = new { id = user.Id, login = user.Login, name = user.Name, roles = user.Roles } }, meta = new { } }
+        : new
+        {
+            data = new
+            {
+                user = new { id = user.Id, login = user.Login, name = user.Name, roles = user.Roles },
+                accessToken = issued.AccessToken,
+                refreshToken = issued.RefreshToken,
+                expiresAt = issued.AccessExpiresAt
+            },
+            meta = new { }
+        };
 static IResult AuthProblem() => Results.Problem(statusCode: 401, title: "Unauthorized", detail: "Login failed.");
 static void WriteCookies(HttpContext context, JwtTokenService tokens, IssuedTokens issued, bool persistent)
 {
@@ -134,7 +214,7 @@ app.MapPost("/api/auth/login", async (LoginRequest request, AuthService auth, Jw
     audit.Record("LoginSucceeded", user.Id, user.Login);
     var issued = tokens.Issue(user, request.RememberMe, sid);
     WriteCookies(context, tokens, issued, request.RememberMe);
-    return Results.Ok(Envelope(user));
+    return Results.Ok(Envelope(user, issued));
 }).AllowAnonymous();
 
 app.MapPost("/api/auth/refresh", (HttpContext context, JwtTokenService tokens, SessionRegistry sessions, AuthAuditService audit) =>
@@ -152,7 +232,7 @@ app.MapPost("/api/auth/refresh", (HttpContext context, JwtTokenService tokens, S
         var persistent = principal.FindFirstValue("remember_me") == "true";
         var issued = tokens.Issue(user, persistent, sid!);
         WriteCookies(context, tokens, issued, persistent);
-        return Results.Ok(Envelope(user));
+        return Results.Ok(Envelope(user, issued));
     }
     catch (SecurityTokenException) { return AuthProblem(); }
     catch (ArgumentException) { return AuthProblem(); }
@@ -195,12 +275,13 @@ app.MapPost("/api/migrations/validate", async ([FromForm] IFormFileCollection fi
     catch (OperationCanceledException) { return Results.Problem(statusCode: 400, title: "Validation cancelled"); }
 }).DisableAntiforgery().RequireAuthorization("Administrator");
 
-app.MapPost("/api/migrations/execute", async ([FromForm] IFormFileCollection files, [FromForm] string mode, ShapefileMigrationService migration, ClaimsPrincipal principal, AuthAuditService audit, ILogger<Program> logger, CancellationToken cancellationToken) =>
+app.MapPost("/api/migrations/execute", async ([FromForm] IFormFileCollection files, [FromForm] string mode, ShapefileMigrationService migration, RoadNetworkGraphService roadGraphService, ClaimsPrincipal principal, AuthAuditService audit, ILogger<Program> logger, CancellationToken cancellationToken) =>
 {
     try
     {
         var user = JwtTokenService.UserFromPrincipal(principal);
         var result = await migration.ExecuteAsync(files, mode, user.Id, cancellationToken);
+        roadGraphService.InvalidateCache();
         audit.Record("ShapefileMigrationCompleted", user.Id, reason: mode);
         return Results.Ok(result);
     }
@@ -386,6 +467,165 @@ app.MapPut("/api/roles/{id:int}", async (int id, UpdateRoleRequest request, User
     catch (ArgumentException ex) { return Results.Problem(statusCode: 400, title: "Bad request", detail: ex.Message); }
     catch (SqlException) { return Results.Problem(statusCode: 503, title: "Database unavailable", detail: "Error al actualizar el rol."); }
 }).RequireAuthorization("Administrator");
+
+// Endpoints de Asignaciones y Ruteo con Dijkstra
+app.MapGet("/api/asignaciones/operadores", async (AssignmentService assignmentService, ILogger<Program> logger, CancellationToken cancellationToken) =>
+{
+    try { return Results.Ok(await assignmentService.GetOperatorsAsync(cancellationToken)); }
+    catch (SqlException ex)
+    {
+        logger.LogError(ex, "Error al consultar operadores: {Message}", ex.Message);
+        return Results.Problem(statusCode: 503, title: "Database unavailable", detail: ex.Message);
+    }
+}).RequireAuthorization();
+
+app.MapPost("/api/asignaciones/calcular-ruta", async (CalculateRouteRequest request, AssignmentService assignmentService, ILogger<Program> logger, CancellationToken cancellationToken) =>
+{
+    try { return Results.Ok(await assignmentService.CalculateRouteAsync(request, cancellationToken)); }
+    catch (ArgumentException ex) { return Results.Problem(statusCode: 400, title: "Bad request", detail: ex.Message); }
+    catch (SqlException ex)
+    {
+        logger.LogError(ex, "Error al calcular la ruta: {Message}", ex.Message);
+        return Results.Problem(statusCode: 503, title: "Database unavailable", detail: ex.Message);
+    }
+}).RequireAuthorization();
+
+app.MapPost("/api/asignaciones/guardar", async (SaveAssignmentRequest request, AssignmentService assignmentService, ILogger<Program> logger, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var id = await assignmentService.SaveAssignmentAsync(request, cancellationToken);
+        return Results.Created($"/api/asignaciones/{id}", new { idAsignacion = id, message = "Asignación guardada exitosamente." });
+    }
+    catch (ArgumentException ex) { return Results.Problem(statusCode: 400, title: "Bad request", detail: ex.Message); }
+    catch (SqlException ex)
+    {
+        logger.LogError(ex, "Error al guardar la asignación: {Message}", ex.Message);
+        return Results.Problem(statusCode: 503, title: "Database unavailable", detail: ex.Message);
+    }
+}).RequireAuthorization();
+
+app.MapGet("/api/asignaciones", async (string? tipo, AssignmentService assignmentService, ILogger<Program> logger, CancellationToken cancellationToken) =>
+{
+    try { return Results.Ok(await assignmentService.GetAssignmentsAsync(tipo, cancellationToken)); }
+    catch (SqlException ex)
+    {
+        logger.LogError(ex, "Error al consultar asignaciones: {Message}", ex.Message);
+        return Results.Problem(statusCode: 503, title: "Database unavailable", detail: ex.Message);
+    }
+}).RequireAuthorization();
+
+app.MapGet("/api/asignaciones/{id:int}/detalles", async (int id, AssignmentService assignmentService, ILogger<Program> logger, CancellationToken cancellationToken) =>
+{
+    try { return Results.Ok(await assignmentService.GetAssignmentDetailsAsync(id, cancellationToken)); }
+    catch (SqlException ex)
+    {
+        logger.LogError(ex, "Error al consultar los detalles de la asignación: {Message}", ex.Message);
+        return Results.Problem(statusCode: 503, title: "Database unavailable", detail: ex.Message);
+    }
+}).RequireAuthorization();
+
+app.MapGet("/api/mobile/mis-asignaciones", async (ClaimsPrincipal principal, AssignmentService assignmentService, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var user = JwtTokenService.UserFromPrincipal(principal);
+        return Results.Ok(await assignmentService.GetOperatorActiveAssignmentsAsync(user.Id, cancellationToken));
+    }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Database unavailable", detail: "Error al consultar asignaciones del operador."); }
+}).RequireAuthorization();
+
+// Endpoints de Monitoreo y Telemetría
+app.MapGet("/api/monitoreo/recorridos", async (int? idUsuario, int? idAsignacion, DateTime? fecha, TrackingAndExecutionService trackingService, CancellationToken cancellationToken) =>
+{
+    try { return Results.Ok(await trackingService.GetTrackingHistoryAsync(idUsuario, idAsignacion, fecha, cancellationToken)); }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Database unavailable", detail: "Error al consultar telemetría."); }
+}).RequireAuthorization();
+
+app.MapPost("/api/mobile/tracking", async (HttpRequest request, ClaimsPrincipal principal, TrackingAndExecutionService trackingService, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var user = JwtTokenService.UserFromPrincipal(principal);
+        using var doc = await System.Text.Json.JsonDocument.ParseAsync(request.Body, cancellationToken: cancellationToken);
+        var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+        if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            var points = System.Text.Json.JsonSerializer.Deserialize<List<IngestTrackingPointDto>>(doc.RootElement.GetRawText(), options) ?? [];
+            await trackingService.IngestTrackingBatchAsync(user.Id, points, cancellationToken);
+        }
+        else if (doc.RootElement.TryGetProperty("points", out var pointsProp) && pointsProp.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            var points = System.Text.Json.JsonSerializer.Deserialize<List<IngestTrackingPointDto>>(pointsProp.GetRawText(), options) ?? [];
+            await trackingService.IngestTrackingBatchAsync(user.Id, points, cancellationToken);
+        }
+        else
+        {
+            var point = System.Text.Json.JsonSerializer.Deserialize<IngestTrackingPointDto>(doc.RootElement.GetRawText(), options)
+                ?? throw new ArgumentException("Payload de telemetría inválido.");
+            await trackingService.IngestTrackingAsync(user.Id, point, cancellationToken);
+        }
+
+        return Results.Accepted();
+    }
+    catch (System.Text.Json.JsonException) { return Results.Problem(statusCode: 400, title: "Bad request", detail: "JSON de telemetría inválido."); }
+    catch (ArgumentException ex) { return Results.Problem(statusCode: 400, title: "Bad request", detail: ex.Message); }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Database unavailable", detail: "Error al registrar posición."); }
+}).RequireAuthorization();
+
+app.MapPost("/api/mobile/ejecutar-corte", async (HttpRequest httpRequest, TrackingAndExecutionService executionService, IWebHostEnvironment environment, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        if (!httpRequest.HasFormContentType)
+            return Results.Problem(statusCode: 400, title: "Bad request", detail: "Se requiere multipart/form-data.");
+
+        var form = await httpRequest.ReadFormAsync(cancellationToken);
+        if (!int.TryParse(form["idAsignacionDetalle"], out var idDetalle) ||
+            !double.TryParse(form["latitudEjecucion"], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var lat) ||
+            !double.TryParse(form["longitudEjecucion"], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var lon))
+        {
+            return Results.Problem(statusCode: 400, title: "Bad request", detail: "Parámetros obligatorios inválidos (idAsignacionDetalle, latitud, longitud).");
+        }
+
+        var estado = form["estado"].ToString();
+        if (!estado.Equals("Cortado", StringComparison.OrdinalIgnoreCase) &&
+            !estado.Equals("Reconectado", StringComparison.OrdinalIgnoreCase) &&
+            !estado.Equals("Observado", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Problem(statusCode: 400, title: "Bad request", detail: "El estado debe ser 'Cortado', 'Reconectado' u 'Observado'.");
+        }
+
+        var lecturaMedidor = form["lecturaMedidor"].ToString();
+        var observacion = form["observacion"].ToString();
+        if (estado.Equals("Observado", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(observacion))
+        {
+            return Results.Problem(statusCode: 400, title: "Bad request", detail: "El motivo de observación es obligatorio cuando el estado es 'Observado'.");
+        }
+
+        // Procesar foto de evidencia si existe
+        string? fotoUrl = null;
+        var file = form.Files.GetFile("foto");
+        if (file is not null && file.Length > 0)
+        {
+            var uploadsDir = Path.Combine(environment.ContentRootPath, "uploads", "evidencias");
+            Directory.CreateDirectory(uploadsDir);
+            var extension = Path.GetExtension(file.FileName);
+            var fileName = $"evidencia_{idDetalle}_{Guid.NewGuid():N}{extension}";
+            var filePath = Path.Combine(uploadsDir, fileName);
+            await using var stream = new FileStream(filePath, FileMode.Create);
+            await file.CopyToAsync(stream, cancellationToken);
+            fotoUrl = $"/uploads/evidencias/{fileName}";
+        }
+
+        var executionRequest = new MobileExecutionRequest(idDetalle, estado, lecturaMedidor, observacion, lat, lon);
+        var result = await executionService.ExecuteTaskAsync(executionRequest, fotoUrl, cancellationToken);
+        return Results.Ok(result);
+    }
+    catch (ArgumentException ex) { return Results.Problem(statusCode: 400, title: "Bad request", detail: ex.Message); }
+    catch (SqlException) { return Results.Problem(statusCode: 503, title: "Database unavailable", detail: "Error en base de datos al ejecutar corte."); }
+}).DisableAntiforgery().RequireAuthorization();
 
 app.Run();
 

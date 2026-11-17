@@ -100,9 +100,11 @@ public sealed class ShapefileMigrationService(IConfiguration configuration, ILog
         catch { await transaction.RollbackAsync(CancellationToken.None); throw; }
     }
 
-    private static async Task ExecuteSqlAsync(string sql, SqlConnection connection, SqlTransaction transaction, CancellationToken cancellationToken)
+    private const int DefaultCommandTimeoutSeconds = 600;
+
+    private static async Task ExecuteSqlAsync(string sql, SqlConnection connection, SqlTransaction transaction, CancellationToken cancellationToken, int commandTimeout = DefaultCommandTimeoutSeconds)
     {
-        await using var command = new SqlCommand(sql, connection, transaction);
+        await using var command = new SqlCommand(sql, connection, transaction) { CommandTimeout = commandTimeout };
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -160,7 +162,12 @@ public sealed class ShapefileMigrationService(IConfiguration configuration, ILog
                     row["Wkt"] = wkt;
                     batch.Rows.Add(row);
                 }
-                using var bulkCopy = new SqlBulkCopy(connection, SqlBulkCopyOptions.Default, transaction) { DestinationTableName = stagingTable, BatchSize = BulkBatchSize };
+                using var bulkCopy = new SqlBulkCopy(connection, SqlBulkCopyOptions.Default, transaction)
+                {
+                    DestinationTableName = stagingTable,
+                    BatchSize = BulkBatchSize,
+                    BulkCopyTimeout = DefaultCommandTimeoutSeconds
+                };
                 foreach (DataColumn column in batch.Columns) bulkCopy.ColumnMappings.Add(column.ColumnName, column.ColumnName);
                 await bulkCopy.WriteToServerAsync(batch, cancellationToken);
                 var batchNumber = offset / BulkBatchSize + 1;

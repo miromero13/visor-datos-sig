@@ -44,6 +44,20 @@ Commands below assume macOS/Linux and a .NET 10 SDK. ASP.NET Core does not load 
     dotnet run --project VisorDatosSig.Api/VisorDatosSig.Api.csproj -- --migrate-database
     ```
 
+    The default Command Timeout is 600 seconds (10 minutes) for heavy spatial batches. You can customize the timeout using `--timeout <seconds>` or `--command-timeout <seconds>`:
+
+    ```sh
+    # Custom timeout for slow VPS or large datasets
+    dotnet run --project VisorDatosSig.Api/VisorDatosSig.Api.csproj -- --migrate-database --timeout 900
+
+    # Run a specific script with custom timeout
+    dotnet run --project VisorDatosSig.Api/VisorDatosSig.Api.csproj -- --migrate-database 05_Optimizar_Relacion_CodigoFijo_Lote.sql --timeout 900
+    ```
+
+    You can also configure the timeout via:
+    - Environment variable: `MIGRATION_COMMAND_TIMEOUT=600` or `DatabaseMigration__CommandTimeout=600`
+    - Connection string: `Server=...;Database=...;Command Timeout=600;...` (automatically extracted and applied)
+
     An alternate scripts directory can be supplied as the optional argument:
 
     ```sh
