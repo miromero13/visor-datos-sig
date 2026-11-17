@@ -1,0 +1,17 @@
+# Local IDE and SDK configuration
+.idea/
+local.properties
+.DS_Store
+
+# Generated Gradle and Android build output
+.gradle/
+.kotlin/
+.cxx/
+build/
+captures/
+*.apk
+*.aab
+
+# Private signing material
+*.jks
+*.keystore
