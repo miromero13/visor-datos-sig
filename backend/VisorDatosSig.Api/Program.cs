@@ -176,7 +176,8 @@ static object Envelope(AuthUser user, IssuedTokens? issued = null) =>
             },
             meta = new { }
         };
-static IResult AuthProblem() => Results.Problem(statusCode: 401, title: "Unauthorized", detail: "Login failed.");
+static IResult AuthProblem(string detail = "Usuario o contraseña incorrectos, o la cuenta se encuentra inactiva.") =>
+    Results.Problem(statusCode: 401, title: "Error de autenticación", detail: detail);
 static void WriteCookies(HttpContext context, JwtTokenService tokens, IssuedTokens issued, bool persistent)
 {
     var origin = context.Request.Headers.Origin.ToString();
@@ -199,7 +200,7 @@ static void WriteCookies(HttpContext context, JwtTokenService tokens, IssuedToke
 
 app.MapPost("/api/auth/login", async (LoginRequest request, AuthService auth, JwtTokenService tokens, SessionRegistry sessions, AuthAuditService audit, HttpContext context, CancellationToken cancellationToken) =>
 {
-    if (string.IsNullOrWhiteSpace(request.Login) || string.IsNullOrEmpty(request.Password)) { audit.Record("LoginFailed", login: request.Login, reason: "invalid_credentials"); return AuthProblem(); }
+    if (string.IsNullOrWhiteSpace(request.Login) || string.IsNullOrEmpty(request.Password)) { audit.Record("LoginFailed", login: request.Login, reason: "invalid_credentials"); return AuthProblem("Debe ingresar su usuario y contraseña."); }
     AuthUser? user;
     try
     {
