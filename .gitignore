@@ -2,6 +2,7 @@
 .env
 .env.*
 !backend/.env.example
+!frontend/.env.example
 **/bin/
 **/obj/
 
