@@ -34,6 +34,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
+    SET LOCK_TIMEOUT 600000; -- 10 minutos de espera de bloqueo para entornos remotos / VPS
 
     /* Completa IdManzana cuando la importación SHP dejó el vínculo vacío. */
     UPDATE l
@@ -51,10 +52,12 @@ BEGIN
       ) a
      WHERE l.IdManzana IS NULL;
 
+    /* Asocia los códigos fijos con el lote espacial correspondiente evitando recomputar
+       los que ya cuentan con el lote correcto asignado. */
     UPDATE c
        SET IdLote = a.IdLote
       FROM dbo.CodigosFijos c
-      OUTER APPLY (
+      CROSS APPLY (
           SELECT TOP (1) l.IdLote
             FROM dbo.Lotes l
            WHERE c.Geom IS NOT NULL
@@ -64,7 +67,8 @@ BEGIN
              AND l.Geom.STIntersects(c.Geom) = 1
            ORDER BY l.Geom.STArea(), l.IdLote
       ) a
-     WHERE ISNULL(c.IdLote, -1) <> ISNULL(a.IdLote, -1);
+     WHERE c.Geom IS NOT NULL
+       AND (c.IdLote IS NULL OR c.IdLote <> a.IdLote);
 
     SELECT COUNT(*) AS TotalCodigos,
            COUNT(IdLote) AS AsociadosALote,
