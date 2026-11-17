@@ -38,7 +38,18 @@ export async function apiFetch(path: string, init?: RequestOptions): Promise<Res
 
 async function request(path: string, init?: RequestInit): Promise<Envelope | undefined> {
   const response = await send(path, init);
-  if (!response.ok) throw new Error(response.status === 401 ? "No pudimos validar tus credenciales." : "No se pudo completar la solicitud. Intentá nuevamente.");
+  if (!response.ok) {
+    let message = response.status === 401 ? "Usuario o contraseña incorrectos, o la cuenta se encuentra inactiva." : "No se pudo completar la solicitud. Intentá nuevamente.";
+    try {
+      const body = await response.json();
+      if (body?.detail) message = body.detail;
+      else if (body?.message) message = body.message;
+      else if (body?.title && body.title !== "Unauthorized") message = body.title;
+    } catch {
+      /* Fallback si no es JSON */
+    }
+    throw new Error(message);
+  }
   if (response.status === 204) return undefined;
   return response.json() as Promise<Envelope>;
 }

@@ -12,7 +12,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     configureSessionExpiry(() => setUser(null));
     getSession().then(setUser).catch(() => setUser(null)).finally(() => setLoading(false));
   }, []);
-  async function login(login: string, password: string, rememberMe: boolean) { setError(""); try { setUser(await loginRequest(login, password, rememberMe)); } catch { setError("No pudimos validar tus credenciales."); throw new Error("Login failed"); } }
+  async function login(login: string, password: string, rememberMe: boolean) {
+    setError("");
+    try {
+      setUser(await loginRequest(login, password, rememberMe));
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Usuario o contraseña incorrectos, o la cuenta se encuentra inactiva.";
+      setError(message);
+      throw cause;
+    }
+  }
   async function logout() { await logoutRequest(); setUser(null); }
   async function changePassword(currentPassword: string, newPassword: string) { await changePasswordRequest(currentPassword, newPassword); }
   return <AuthContext.Provider value={{ user, loading, error, login, logout, changePassword }}>{children}</AuthContext.Provider>;
